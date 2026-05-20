@@ -1,0 +1,14 @@
+services:
+  rythm:
+    build: .
+    container_name: rythm
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      RYTHM_PASSWORD_HASH: "${RYTHM_PASSWORD_HASH:-}"
+      RYTHM_COOKIE_SECRET: "${RYTHM_COOKIE_SECRET:-rythm-local-secret-change-after-first-deploy}"
