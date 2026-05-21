@@ -3,7 +3,6 @@
   import { get } from "svelte/store";
   import ActivitiesView from "./components/ActivitiesView.svelte";
   import ActivityDialog from "./components/ActivityDialog.svelte";
-  import ActivityPicker from "./components/ActivityPicker.svelte";
   import ItemDialog from "./components/ItemDialog.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import StatsView from "./components/StatsView.svelte";
@@ -32,9 +31,9 @@
   let itemDialogOpen = false;
   let itemId: string | null = null;
   let markerId: string | null = null;
+  let draftItem: { activityId: string; startAbsMin: number; endAbsMin: number; replaceItemId?: string } | null = null;
   let syncingViewToUrl = false;
 
-  $: hasPicker = $currentView === "week" && $editMode;
   $: syncClass = classifySync($syncStatus);
   $: applyTheme($appState);
 
@@ -90,12 +89,21 @@
   function openItem(id: string): void {
     itemId = id;
     markerId = null;
+    draftItem = null;
     itemDialogOpen = true;
   }
 
   function openDayEnd(id: string): void {
     markerId = id;
     itemId = null;
+    draftItem = null;
+    itemDialogOpen = true;
+  }
+
+  function openDraftItem(draft: { activityId: string; startAbsMin: number; endAbsMin: number; replaceItemId?: string }): void {
+    draftItem = draft;
+    itemId = null;
+    markerId = null;
     itemDialogOpen = true;
   }
 
@@ -171,7 +179,7 @@
     </form>
   </div>
 {:else if $appState}
-  <div class:has-picker={hasPicker} class="app-shell">
+  <div class="app-shell">
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark"></span>
@@ -211,10 +219,9 @@
     </header>
 
     <main class="main">
-      <ActivityPicker />
       <section class="view">
         {#if $currentView === "week"}
-          <WeekView state={$appState} onOpenItem={openItem} onOpenDayEnd={openDayEnd} />
+          <WeekView state={$appState} onOpenItem={openItem} onOpenDraftItem={openDraftItem} onOpenDayEnd={openDayEnd} />
         {:else if $currentView === "activities"}
           <ActivitiesView state={$appState} onOpenActivity={openActivity} />
         {:else}
@@ -237,7 +244,7 @@
   </div>
 
   <ActivityDialog state={$appState} open={activityDialogOpen} activityId={activityId} onClose={() => (activityDialogOpen = false)} />
-  <ItemDialog state={$appState} open={itemDialogOpen} {itemId} {markerId} onClose={() => { itemDialogOpen = false; itemId = null; markerId = null; }} />
+  <ItemDialog state={$appState} open={itemDialogOpen} {itemId} {markerId} {draftItem} onClose={() => { itemDialogOpen = false; itemId = null; markerId = null; draftItem = null; }} />
   <SettingsDialog state={$appState} open={settingsOpen} onClose={() => (settingsOpen = false)} />
 {:else}
   <div class="auth-screen">

@@ -1,30 +1,55 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
-  import { appState, editMode, mutateState, selectedActivityId, selectedSystem, showToast } from "../lib/stores";
+  import { activeActivities, appState, editMode, mutateState, selectedActivityId, selectedSystem, showToast } from "../lib/stores";
   import {
     activityMap,
     blocksInColumn,
-    canPlace,
     clampToStep,
+    DAY_MIN,
     dayColumns,
     durationText,
     formatClock,
     now,
+    parseClock,
     safeColor,
     textColor,
     uid,
     validateState
   } from "../lib/state";
   import type { Activity, ActivityTimelineItem, DayColumn, RythmState } from "../lib/types";
+  import Modal from "./Modal.svelte";
+  import PickerTree from "./PickerTree.svelte";
 
   export let state: RythmState;
   export let onOpenItem: (id: string) => void = () => {};
+  export let onOpenDraftItem: (draft: { activityId: string; startAbsMin: number; endAbsMin: number; replaceItemId?: string }) => void = () => {};
   export let onOpenDayEnd: (id: string) => void = () => {};
+
+  let pickerOpen = false;
+  let lastTap = { id: "", at: 0 };
+  let suppressClickUntil = 0;
+  let drag:
+    | {
+        id: string;
+        mode: "start" | "end" | "move";
+        pointerId: number;
+        pointerStartY: number;
+        itemStart: number;
+        itemEnd: number;
+        duration: number;
+        columnStart: number;
+        columnEnd: number;
+      }
+    | null = null;
 
   $: columns = dayColumns(state);
   $: map = activityMap(state);
   $: warnings = validateState(state);
+  $: visibleWarnings = warnings.filter((warning) =>
+    warning !== "Есть пересечения активностей." &&
+    (!$editMode || warning !== "Есть активность, пересекающая системный конец дня.")
+  );
   $: todayIndex = currentWeekdayIndex();
 
   function currentWeekdayIndex(): number {
@@ -60,6 +85,15 @@
 
   function isCompact(item: ActivityTimelineItem): boolean {
     return item.endAbsMin - item.startAbsMin <= 15;
+  }
+
+  function itemOverlaps(item: ActivityTimelineItem): boolean {
+    return state.timeline.some((entry) =>
+      entry.type === "activity" &&
+      entry.id !== item.id &&
+      item.startAbsMin < entry.endAbsMin &&
+      item.endAbsMin > entry.startAbsMin
+    );
   }
 
   type ColumnRow =
@@ -101,27 +135,15 @@
     const defaultDuration = Math.max(step, clampToStep(activity.defaultDurationMin, step));
     const freeDuration = Number.isFinite(freeUntilAbsMin) ? Math.max(0, freeUntilAbsMin - startAbsMin) : defaultDuration;
     const freeDurationByStep = Math.floor(freeDuration / step) * step;
-    const duration = Number.isFinite(freeUntilAbsMin) ? Math.min(defaultDuration, freeDurationByStep) : defaultDuration;
+    const duration = Math.max(step, Number.isFinite(freeUntilAbsMin) ? Math.min(defaultDuration, freeDurationByStep || defaultDuration) : defaultDuration);
     if (duration < step) {
       showToast("В этом промежутке меньше 5 минут.");
       return;
     }
     const endAbsMin = startAbsMin + duration;
-    if (!canPlace(current, { startAbsMin, endAbsMin })) {
-      showToast("Недостаточно свободного места для дефолтной длительности.");
-      return;
-    }
-    mutateState((draft) => {
-      draft.timeline.push({
-        id: uid("item"),
-        type: "activity",
-        activityId: activity.id,
-        startAbsMin,
-        endAbsMin,
-        createdAt: now(),
-        updatedAt: now()
-      });
-    });
+    selectedActivityId.set(null);
+    selectedSystem.set(null);
+    onOpenDraftItem({ activityId: activity.id, startAbsMin, endAbsMin });
   }
 
   function addDayEndAt(atAbsMin: number): void {
@@ -138,17 +160,144 @@
   }
 
   function blockClick(id: string): void {
+    if (Date.now() < suppressClickUntil) return;
     if ($selectedActivityId && $editMode) {
-      mutateState((draft) => {
-        const item = draft.timeline.find((entry) => entry.id === id);
-        if (item?.type === "activity") {
-          item.activityId = $selectedActivityId;
-          item.updatedAt = now();
-        }
+      const item = state.timeline.find((entry): entry is ActivityTimelineItem => entry.type === "activity" && entry.id === id);
+      const activity = $selectedActivityId ? map.get($selectedActivityId) : null;
+      if (!item || !activity) return;
+      const step = state.settings.timeStepMin || 5;
+      const duration = Math.max(step, clampToStep(activity.defaultDurationMin, step));
+      selectedActivityId.set(null);
+      selectedSystem.set(null);
+      onOpenDraftItem({
+        activityId: activity.id,
+        startAbsMin: item.startAbsMin,
+        endAbsMin: item.startAbsMin + duration,
+        replaceItemId: item.id
       });
       return;
     }
+    const timestamp = Date.now();
+    if (lastTap.id === id && timestamp - lastTap.at < 360) {
+      onOpenItem(id);
+      lastTap = { id: "", at: 0 };
+      return;
+    }
+    lastTap = { id, at: timestamp };
+  }
+
+  function blockKeydown(event: KeyboardEvent, id: string): void {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if ($selectedActivityId && $editMode) {
+      blockClick(id);
+      return;
+    }
     onOpenItem(id);
+  }
+
+  function updateItem(id: string, patch: Partial<ActivityTimelineItem>): void {
+    mutateState((draft) => {
+      const item = draft.timeline.find((entry) => entry.type === "activity" && entry.id === id);
+      if (!item || item.type !== "activity") return;
+      Object.assign(item, patch, { updatedAt: now() });
+    });
+  }
+
+  function updateStart(item: ActivityTimelineItem, value: string): void {
+    const step = state.settings.timeStepMin || 5;
+    const next = clampToStep(parseClock(value, item.startAbsMin, state), step);
+    updateItem(item.id, { startAbsMin: Math.min(next, item.endAbsMin - step) });
+  }
+
+  function updateEnd(item: ActivityTimelineItem, value: string): void {
+    const step = state.settings.timeStepMin || 5;
+    let next = clampToStep(parseClock(value, item.endAbsMin, state), step);
+    while (next <= item.startAbsMin) next += DAY_MIN;
+    updateItem(item.id, { endAbsMin: Math.max(next, item.startAbsMin + step) });
+  }
+
+  function updateDuration(item: ActivityTimelineItem, value: string | number): void {
+    const step = state.settings.timeStepMin || 5;
+    const duration = Math.max(step, clampToStep(value, step));
+    updateItem(item.id, { endAbsMin: item.startAbsMin + duration });
+  }
+
+  function updateDurationParts(item: ActivityTimelineItem, hours: string | number, minutes: string | number): void {
+    updateDuration(item, Number(hours || 0) * 60 + Number(minutes || 0));
+  }
+
+  function minuteFromPointer(event: PointerEvent, duration = 0): number | null {
+    const body = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".day-body");
+    if (!body) return null;
+    const start = Number(body.dataset.start);
+    const end = Number(body.dataset.end);
+    const rect = body.getBoundingClientRect();
+    const scale = (state.settings.pxPer5Min || 2) / 5;
+    const y = Math.max(0, event.clientY - rect.top - 8);
+    const raw = start + y / scale;
+    const maxStart = Math.max(start, end - duration);
+    return Math.min(maxStart, Math.max(start, clampToStep(raw, state.settings.timeStepMin || 5)));
+  }
+
+  function minuteFromOriginalColumn(event: PointerEvent): number | null {
+    if (!drag) return null;
+    const body = document.querySelector<HTMLElement>(`.day-body[data-start="${drag.columnStart}"]`);
+    if (!body) return null;
+    const rect = body.getBoundingClientRect();
+    const scale = (state.settings.pxPer5Min || 2) / 5;
+    const y = Math.max(0, event.clientY - rect.top - 8);
+    const raw = drag.columnStart + y / scale;
+    return Math.min(drag.columnEnd, Math.max(drag.columnStart, clampToStep(raw, state.settings.timeStepMin || 5)));
+  }
+
+  function startDrag(event: PointerEvent, item: ActivityTimelineItem, mode: "start" | "end" | "move"): void {
+    if (!$editMode || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const body = (event.currentTarget as HTMLElement).closest<HTMLElement>(".day-body");
+    drag = {
+      id: item.id,
+      mode,
+      pointerId: event.pointerId,
+      pointerStartY: event.clientY,
+      itemStart: item.startAbsMin,
+      itemEnd: item.endAbsMin,
+      duration: item.endAbsMin - item.startAbsMin,
+      columnStart: body ? Number(body.dataset.start) : Math.floor(item.startAbsMin / DAY_MIN) * DAY_MIN,
+      columnEnd: body ? Number(body.dataset.end) : Math.ceil(item.endAbsMin / DAY_MIN) * DAY_MIN
+    };
+    window.addEventListener("pointermove", moveDrag);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+  }
+
+  function moveDrag(event: PointerEvent): void {
+    if (!drag) return;
+    event.preventDefault();
+    const step = state.settings.timeStepMin || 5;
+    const scale = (state.settings.pxPer5Min || 2) / 5;
+    const delta = clampToStep((event.clientY - drag.pointerStartY) / scale, step);
+    if (drag.mode === "start") {
+      const nextStart = minuteFromOriginalColumn(event) ?? drag.itemStart + delta;
+      updateItem(drag.id, { startAbsMin: Math.min(nextStart, drag.itemEnd - step) });
+    } else if (drag.mode === "end") {
+      const nextEnd = minuteFromOriginalColumn(event) ?? drag.itemEnd + delta;
+      updateItem(drag.id, { endAbsMin: Math.max(nextEnd, drag.itemStart + step) });
+    } else {
+      const nextStart = minuteFromPointer(event, drag.duration);
+      if (nextStart == null) return;
+      updateItem(drag.id, { startAbsMin: nextStart, endAbsMin: nextStart + drag.duration });
+    }
+  }
+
+  function endDrag(event: PointerEvent): void {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag = null;
+    suppressClickUntil = Date.now() + 250;
+    window.removeEventListener("pointermove", moveDrag);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
   }
 </script>
 
@@ -157,10 +306,15 @@
     <div>
       <h1>Неделя</h1>
     </div>
+    {#if $editMode}
+      <button class="btn btn-dark btn-sm icon-button" type="button" title="Добавить активность" aria-label="Добавить активность" on:click={() => (pickerOpen = true)}>
+        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+      </button>
+    {/if}
   </div>
-  {#if warnings.length}
+  {#if visibleWarnings.length}
     <div class="warnings">
-      {#each warnings as warning}
+      {#each visibleWarnings as warning}
         <div>{warning}</div>
       {/each}
     </div>
@@ -174,7 +328,7 @@
             <strong>{column.label}</strong>
             <span>{column.index === todayIndex && !column.extra ? "сегодня" : durationText(column.end - column.start)}</span>
           </header>
-          <div class="day-body">
+          <div class="day-body" data-start={column.start} data-end={column.end}>
             {#each columnRows(column) as row (row.id)}
               {#if row.type === "gap"}
                 <button
@@ -189,24 +343,39 @@
               {:else}
                 {@const item = row.item}
                 {@const activity = map.get(item.activityId)}
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabindex="0"
                   class:is-editing={$editMode}
                   class:is-compact={isCompact(item)}
+                  class:has-overlap={itemOverlaps(item)}
                   class="week-block"
                   style={blockStyle(activity, item)}
                   on:click={() => blockClick(item.id)}
+                  on:keydown={(event) => blockKeydown(event, item.id)}
+                  on:dblclick|stopPropagation={() => onOpenItem(item.id)}
                 >
-                  <span class="resize-trigger resize-trigger-start" aria-hidden="true"></span>
-                  <strong class="week-block-title">{activity ? activity.name : "Нет активности"}</strong>
-                  <span class="week-block-times">
-                    <span>{formatClock(item.startAbsMin, state)}</span>
-                    <span>{formatClock(item.endAbsMin, state)}</span>
-                  </span>
-                  <em class="week-block-duration">{durationText(item.endAbsMin - item.startAbsMin)}</em>
+                  <span class="resize-trigger resize-trigger-start" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "start")}></span>
+                  <strong class="week-block-title" on:pointerdown={(event) => startDrag(event, item, "move")}>{activity ? activity.name : "Нет активности"}</strong>
+                  {#if $editMode}
+                    <span class="week-block-times is-editable">
+                      <input aria-label="Начало" type="time" step="300" value={formatClock(item.startAbsMin, state)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateStart(item, event.currentTarget.value)}>
+                      <input aria-label="Конец" type="time" step="300" value={formatClock(item.endAbsMin, state)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateEnd(item, event.currentTarget.value)}>
+                    </span>
+                    <span class="week-block-duration is-editable">
+                      <input aria-label="Часы длительности" type="number" min="0" step="1" value={Math.floor((item.endAbsMin - item.startAbsMin) / 60)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, event.currentTarget.value, (item.endAbsMin - item.startAbsMin) % 60)}>
+                      <input aria-label="Минуты длительности" type="number" min="0" max="55" step="5" value={(item.endAbsMin - item.startAbsMin) % 60} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, Math.floor((item.endAbsMin - item.startAbsMin) / 60), event.currentTarget.value)}>
+                    </span>
+                  {:else}
+                    <span class="week-block-times">
+                      <span>{formatClock(item.startAbsMin, state)}</span>
+                      <span>{formatClock(item.endAbsMin, state)}</span>
+                    </span>
+                    <em class="week-block-duration">{durationText(item.endAbsMin - item.startAbsMin)}</em>
+                  {/if}
                   {#if activity?.archived}<small>архив</small>{/if}
-                  <span class="resize-trigger resize-trigger-end" aria-hidden="true"></span>
-                </button>
+                  <span class="resize-trigger resize-trigger-end" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "end")}></span>
+                </div>
               {/if}
             {/each}
             {#if column.marker}
@@ -222,3 +391,24 @@
     </div>
   </div>
 </div>
+
+<Modal open={pickerOpen} title="Добавить в неделю" scrollable={true} onClose={() => (pickerOpen = false)}>
+  <PickerTree
+    activities={$activeActivities}
+    selectedId={$selectedActivityId}
+    selectedSystem={$selectedSystem}
+    allowSystem={true}
+    onPick={(id) => {
+      selectedActivityId.set(id);
+      selectedSystem.set(null);
+      pickerOpen = false;
+      showToast("Выберите место на неделе.");
+    }}
+    onPickSystem={(system) => {
+      selectedActivityId.set(null);
+      selectedSystem.set(system);
+      pickerOpen = false;
+      showToast("Выберите место конца дня.");
+    }}
+  />
+</Modal>
