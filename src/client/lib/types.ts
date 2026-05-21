@@ -7,6 +7,7 @@ export interface RythmSettings {
   weekStartClockMin: number;
   timeStepMin: number;
   pxPer5Min: number;
+  smartWeekGrid: boolean;
   mobileWeekScale: number;
   firstDayLabel: string;
   theme: ThemeMode;

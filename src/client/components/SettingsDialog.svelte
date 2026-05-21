@@ -13,6 +13,7 @@
   let authEnabled = false;
   let startClock = "07:00";
   let scale = 2;
+  let smartWeekGrid = true;
   let mobileWeekScale = 1;
   let theme: ThemeMode = "system";
   let glowEnabled = true;
@@ -22,6 +23,7 @@
     authEnabled = Boolean(state.settings.authEnabled);
     startClock = formatClock(0, state);
     scale = state.settings.pxPer5Min || 2;
+    smartWeekGrid = state.settings.smartWeekGrid !== false;
     mobileWeekScale = state.settings.mobileWeekScale || 1;
     theme = state.settings.theme || "system";
     glowEnabled = state.settings.glowEnabled !== false;
@@ -34,6 +36,7 @@
       const [hours, minutes] = startClock.split(":").map(Number);
       draft.settings.weekStartClockMin = hours * 60 + minutes;
       draft.settings.pxPer5Min = Number(scale || 2);
+      draft.settings.smartWeekGrid = smartWeekGrid;
       draft.settings.mobileWeekScale = Math.min(1.8, Math.max(0.7, Number(mobileWeekScale || 1)));
       draft.settings.theme = theme;
       draft.settings.glowEnabled = glowEnabled;
@@ -92,6 +95,10 @@
   <label class="check-line form-check">
     <input class="form-check-input" type="checkbox" bind:checked={glowEnabled}>
     Включить glow-эффекты
+  </label>
+  <label class="check-line form-check">
+    <input class="form-check-input" type="checkbox" bind:checked={smartWeekGrid}>
+    Умная сетка недели
   </label>
   <label class="form-label">JSON
     <textarea class="form-control font-monospace" rows="8" bind:value={jsonText}></textarea>

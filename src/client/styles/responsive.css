@@ -118,13 +118,13 @@
 
   .week-grid {
     font-size: calc(1rem * var(--mobile-week-scale, 1));
-    min-width: calc(var(--day-count) * 214px + (var(--day-count) - 1) * 10px);
-    grid-template-columns: repeat(var(--day-count), 214px);
-    gap: 10px;
+    min-width: calc(var(--day-count) * 13.375em + (var(--day-count) - 1) * 0.625em);
+    grid-template-columns: repeat(var(--day-count), 13.375em);
+    gap: 0.625em;
   }
 
   .week-block:not(.is-editing) .week-block-title {
-    padding-inline: 6px;
+    padding-inline: 0.375em;
   }
 
   .week-scroll,

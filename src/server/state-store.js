@@ -129,6 +129,7 @@ function createDefaultState() {
       weekStartClockMin: 420,
       timeStepMin: 5,
       pxPer5Min: 2,
+      smartWeekGrid: true,
       mobileWeekScale: 1,
       firstDayLabel: "Пн",
       theme: "system",

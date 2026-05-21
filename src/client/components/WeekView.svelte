@@ -22,6 +22,11 @@
   import Modal from "./Modal.svelte";
   import PickerTree from "./PickerTree.svelte";
 
+  const ROOT_FONT_PX = 16;
+  const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
+  const MIN_VIEW_BLOCK_HEIGHT_EM = 24 / ROOT_FONT_PX;
+  const MIN_EDIT_BLOCK_HEIGHT_EM = 40 / ROOT_FONT_PX;
+
   export let state: RythmState;
   export let onOpenItem: (id: string) => void = () => {};
   export let onOpenDraftItem: (draft: { activityId: string; startAbsMin: number; endAbsMin: number; replaceItemId?: string }) => void = () => {};
@@ -40,8 +45,10 @@
         itemEnd: number;
         duration: number;
         pointerOffsetMin: number;
+        columnIndex: number;
         columnStart: number;
         columnEnd: number;
+        layout: WeekLayout;
         target: HTMLElement;
         scrollContainer: HTMLElement | null;
         scrollStartTop: number;
@@ -50,6 +57,9 @@
     | null = null;
 
   $: columns = dayColumns(state);
+  $: rowsByColumn = columns.map((column) => columnRows(column));
+  $: weekLayout = createWeekLayout(columns, rowsByColumn, $editMode);
+  $: renderLayout = drag?.layout || weekLayout;
   $: map = activityMap(state);
   $: warnings = validateState(state);
   $: visibleWarnings = warnings.filter((warning) =>
@@ -74,20 +84,103 @@
     focusToday();
   });
 
-  function rowHeight(from: number, to: number): number {
-    const duration = Math.max(0, to - from);
-    return Math.max(20, (duration / 5) * (state.settings.pxPer5Min || 2));
+  type WeekLayout = {
+    step: number;
+    baseSlotEm: number;
+    slotHeightsEm: number[];
+  };
+
+  type TimeRule = {
+    id: string;
+    topEm: number;
+  };
+
+  function slotRange(column: DayColumn, from: number, to: number, step: number): { start: number; end: number } {
+    const start = Math.max(0, Math.floor((from - column.start) / step));
+    const end = Math.max(start + 1, Math.ceil((to - column.start) / step));
+    return { start, end };
   }
 
-  function blockStyle(activity: Activity | undefined, item: ActivityTimelineItem): string {
-    const px = rowHeight(item.startAbsMin, item.endAbsMin);
+  function blockMinHeightEm(editing: boolean): number {
+    return editing ? MIN_EDIT_BLOCK_HEIGHT_EM : MIN_VIEW_BLOCK_HEIGHT_EM;
+  }
+
+  function rowMinHeightEm(row: ColumnRow, editing: boolean): number {
+    return row.type === "block" ? blockMinHeightEm(editing) : MIN_GAP_HEIGHT_EM;
+  }
+
+  function createWeekLayout(dayColumns: DayColumn[], columnRowsList: ColumnRow[][], editing: boolean): WeekLayout {
+    const step = 5;
+    const baseSlotEm = Math.max(0.01, Number(state.settings.pxPer5Min || 2) / ROOT_FONT_PX);
+    const maxSlotCount = Math.max(1, ...dayColumns.map((column) => Math.ceil(Math.max(0, column.end - column.start) / step)));
+    const slotHeightsEm = Array.from({ length: maxSlotCount }, () => baseSlotEm);
+
+    if (state.settings.smartWeekGrid === false) {
+      return { step, baseSlotEm, slotHeightsEm };
+    }
+
+    columnRowsList.forEach((rows, columnIndex) => {
+      const column = dayColumns[columnIndex];
+      if (!column) return;
+      rows.forEach((row) => {
+        const from = row.type === "gap" ? row.from : row.item.startAbsMin;
+        const to = row.type === "gap" ? row.to : row.item.endAbsMin;
+        const range = slotRange(column, from, to, step);
+        const slotCount = Math.max(1, range.end - range.start);
+        const baseRowEm = slotCount * baseSlotEm;
+        const extraRowEm = Math.max(0, rowMinHeightEm(row, editing) - baseRowEm);
+        const minSlotEm = baseSlotEm + extraRowEm / slotCount;
+        for (let index = range.start; index < range.end; index += 1) {
+          slotHeightsEm[index] = Math.max(slotHeightsEm[index] || baseSlotEm, minSlotEm);
+        }
+      });
+    });
+
+    return { step, baseSlotEm, slotHeightsEm };
+  }
+
+  function rowHeightEm(column: DayColumn, from: number, to: number, minHeightEm: number, layout = renderLayout): number {
+    const range = slotRange(column, from, to, layout.step);
+    let height = 0;
+    for (let index = range.start; index < range.end; index += 1) {
+      height += layout.slotHeightsEm[index] || layout.baseSlotEm;
+    }
+    return Math.max(minHeightEm, height);
+  }
+
+  function rowHeightStyle(column: DayColumn, from: number, to: number, minHeightEm = MIN_GAP_HEIGHT_EM): string {
+    return `height:${rowHeightEm(column, from, to, minHeightEm)}em`;
+  }
+
+  function offsetEm(column: DayColumn, atAbsMin: number, layout = renderLayout): number {
+    const relative = Math.max(0, Math.min(column.end - column.start, atAbsMin - column.start));
+    const fullSlots = Math.floor(relative / layout.step);
+    const partial = (relative % layout.step) / layout.step;
+    let offset = 0;
+    for (let index = 0; index < fullSlots; index += 1) {
+      offset += layout.slotHeightsEm[index] || layout.baseSlotEm;
+    }
+    if (partial > 0) {
+      offset += partial * (layout.slotHeightsEm[fullSlots] || layout.baseSlotEm);
+    }
+    return offset;
+  }
+
+  function hourRules(column: DayColumn): TimeRule[] {
+    if (state.settings.smartWeekGrid === false) return [];
+    const firstHour = Math.ceil(column.start / 60) * 60;
+    const rules: TimeRule[] = [];
+    for (let at = firstHour; at < column.end; at += 60) {
+      if (at <= column.start) continue;
+      rules.push({ id: `${column.index}-${at}`, topEm: 0.5 + offsetEm(column, at, renderLayout) });
+    }
+    return rules;
+  }
+
+  function blockStyle(column: DayColumn, activity: Activity | undefined, item: ActivityTimelineItem): string {
     const color = safeColor(activity ? activity.color : "#e5e7eb");
     const background = colorWithAlpha(color, activity?.opacity ?? 1);
-    return `min-height:${px}px;--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
-  }
-
-  function gapHeight(from: number, to: number): string {
-    return `min-height:${rowHeight(from, to)}px`;
+    return `${rowHeightStyle(column, item.startAbsMin, item.endAbsMin, blockMinHeightEm($editMode))};--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
   }
 
   function isCompact(item: ActivityTimelineItem): boolean {
@@ -248,14 +341,34 @@
 
   function bodyPointerY(event: PointerEvent, body: HTMLElement): number {
     const rect = body.getBoundingClientRect();
-    const paddingTop = Number.parseFloat(getComputedStyle(body).paddingTop) || 0;
+    const styles = getComputedStyle(body);
+    const paddingTop = Number.parseFloat(styles.paddingTop) || 0;
     return Math.max(0, event.clientY - rect.top - paddingTop);
   }
 
-  function pointerMinuteInBody(event: PointerEvent, body: HTMLElement): number {
-    const start = Number(body.dataset.start);
-    const scale = (state.settings.pxPer5Min || 2) / 5;
-    return start + bodyPointerY(event, body) / scale;
+  function bodyFontPx(body: HTMLElement): number {
+    return Number.parseFloat(getComputedStyle(body).fontSize) || ROOT_FONT_PX;
+  }
+
+  function minuteFromLayout(column: DayColumn, yEm: number, layout = renderLayout): number {
+    const slotCount = Math.max(1, Math.ceil(Math.max(0, column.end - column.start) / layout.step));
+    let cursor = 0;
+    for (let index = 0; index < slotCount; index += 1) {
+      const slotHeight = layout.slotHeightsEm[index] || layout.baseSlotEm;
+      if (yEm <= cursor + slotHeight) {
+        const ratio = slotHeight > 0 ? Math.max(0, Math.min(1, (yEm - cursor) / slotHeight)) : 0;
+        return column.start + (index + ratio) * layout.step;
+      }
+      cursor += slotHeight;
+    }
+    return column.end;
+  }
+
+  function pointerMinuteInBody(event: PointerEvent, body: HTMLElement, layout = renderLayout): number {
+    const columnIndex = Number(body.dataset.columnIndex);
+    const column = columns[columnIndex];
+    if (!column) return Number(body.dataset.start);
+    return minuteFromLayout(column, bodyPointerY(event, body) / bodyFontPx(body), layout);
   }
 
   function dragScrollDeltaY(): number {
@@ -269,18 +382,16 @@
     if (!body) return null;
     const start = Number(body.dataset.start);
     const end = Number(body.dataset.end);
-    const raw = pointerMinuteInBody(event, body) - pointerOffsetMin;
+    const raw = pointerMinuteInBody(event, body, drag?.layout || renderLayout) - pointerOffsetMin;
     const maxStart = Math.max(start, end - duration);
     return Math.min(maxStart, Math.max(start, clampToStep(raw, state.settings.timeStepMin || 5)));
   }
 
   function minuteFromOriginalColumn(event: PointerEvent, pointerOffsetMin = 0): number | null {
     if (!drag) return null;
-    const body = document.querySelector<HTMLElement>(`.day-body[data-start="${drag.columnStart}"]`);
+    const body = document.querySelector<HTMLElement>(`.day-body[data-column-index="${drag.columnIndex}"]`);
     if (!body) return null;
-    const scale = (state.settings.pxPer5Min || 2) / 5;
-    const y = bodyPointerY(event, body);
-    const raw = drag.columnStart + y / scale - pointerOffsetMin;
+    const raw = pointerMinuteInBody(event, body, drag.layout) - pointerOffsetMin;
     return Math.min(drag.columnEnd, Math.max(drag.columnStart, clampToStep(raw, state.settings.timeStepMin || 5)));
   }
 
@@ -292,7 +403,13 @@
     target.setPointerCapture?.(event.pointerId);
     const body = target.closest<HTMLElement>(".day-body");
     const scrollContainer = target.closest<HTMLElement>(".week-scroll");
-    const pointerMin = body ? pointerMinuteInBody(event, body) : item.startAbsMin;
+    const columnIndex = body ? Number(body.dataset.columnIndex) : columns.findIndex((column) => item.startAbsMin >= column.start && item.startAbsMin < column.end);
+    const layout = {
+      step: renderLayout.step,
+      baseSlotEm: renderLayout.baseSlotEm,
+      slotHeightsEm: renderLayout.slotHeightsEm.slice()
+    };
+    const pointerMin = body ? pointerMinuteInBody(event, body, layout) : item.startAbsMin;
     const anchorMin = mode === "end" ? item.endAbsMin : item.startAbsMin;
     const pointerOffsetMin = body
       ? Math.min(item.endAbsMin - item.startAbsMin, Math.max(-(item.endAbsMin - item.startAbsMin), pointerMin - anchorMin))
@@ -306,8 +423,10 @@
       itemEnd: item.endAbsMin,
       duration: item.endAbsMin - item.startAbsMin,
       pointerOffsetMin,
+      columnIndex,
       columnStart: body ? Number(body.dataset.start) : Math.floor(item.startAbsMin / DAY_MIN) * DAY_MIN,
       columnEnd: body ? Number(body.dataset.end) : Math.ceil(item.endAbsMin / DAY_MIN) * DAY_MIN,
+      layout,
       target,
       scrollContainer,
       scrollStartTop: scrollContainer?.scrollTop || 0,
@@ -322,8 +441,8 @@
     if (!drag) return;
     event.preventDefault();
     const step = state.settings.timeStepMin || 5;
-    const scale = (state.settings.pxPer5Min || 2) / 5;
-    const delta = clampToStep((event.clientY - drag.pointerStartY + dragScrollDeltaY()) / scale, step);
+    const fallbackSlotPx = Math.max(1, drag.layout.baseSlotEm * ROOT_FONT_PX);
+    const delta = clampToStep(((event.clientY - drag.pointerStartY + dragScrollDeltaY()) / fallbackSlotPx) * drag.layout.step, step);
     if (drag.mode === "start") {
       const nextStart = minuteFromOriginalColumn(event, drag.pointerOffsetMin) ?? drag.itemStart + delta;
       updateItem(drag.id, { startAbsMin: Math.min(nextStart, drag.itemEnd - step) });
@@ -353,21 +472,21 @@
     <div>
       <h1>Неделя</h1>
     </div>
-    {#if $editMode}
-      <div class="week-head-actions">
-        <span class="mobile-scale-actions">
-          <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Уменьшить неделю" aria-label="Уменьшить неделю" on:click={() => adjustMobileScale(-0.05)}>
-            <i class="bi bi-dash-lg" aria-hidden="true"></i>
-          </button>
-          <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Увеличить неделю" aria-label="Увеличить неделю" on:click={() => adjustMobileScale(0.05)}>
-            <i class="bi bi-plus-lg" aria-hidden="true"></i>
-          </button>
-        </span>
+    <div class="week-head-actions">
+      <span class="mobile-scale-actions">
+        <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Уменьшить неделю" aria-label="Уменьшить неделю" on:click={() => adjustMobileScale(-0.05)}>
+          <i class="bi bi-dash-lg" aria-hidden="true"></i>
+        </button>
+        <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Увеличить неделю" aria-label="Увеличить неделю" on:click={() => adjustMobileScale(0.05)}>
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        </button>
+      </span>
+      {#if $editMode}
         <button class="btn btn-dark btn-sm icon-button" type="button" title="Добавить активность" aria-label="Добавить активность" on:click={() => (pickerOpen = true)}>
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
-      </div>
-    {/if}
+      {/if}
+    </div>
   </div>
   {#if visibleWarnings.length}
     <div class="warnings">
@@ -377,22 +496,25 @@
     </div>
   {/if}
   <div class="week-scroll">
-    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${state.settings.pxPer5Min || 2}px;--mobile-week-scale:${state.settings.mobileWeekScale || 1}`}>
-      {#each columns as column}
-        {@const rows = columnRows(column)}
+    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${renderLayout.baseSlotEm}em;--mobile-week-scale:${state.settings.mobileWeekScale || 1}`}>
+      {#each columns as column, columnIndex}
+        {@const rows = rowsByColumn[columnIndex] || []}
         <section class:is-extra={column.extra} class:is-today={column.index === todayIndex && !column.extra} class="day-column" tabindex="-1" aria-current={column.index === todayIndex && !column.extra ? "date" : undefined}>
           <header>
             <strong>{column.label}</strong>
             <span>{column.index === todayIndex && !column.extra ? "сегодня" : durationText(column.end - column.start)}</span>
           </header>
-          <div class="day-body" data-start={column.start} data-end={column.end}>
+          <div class="day-body" data-column-index={columnIndex} data-start={column.start} data-end={column.end}>
+            {#each hourRules(column) as rule (rule.id)}
+              <span class="time-rule" style={`top:${rule.topEm}em`} aria-hidden="true"></span>
+            {/each}
             {#each rows as row, rowIndex (row.id)}
               {#if row.type === "gap"}
                 <button
                   type="button"
                   class:is-editable={$editMode}
                   class="gap"
-                  style={gapHeight(row.from, row.to)}
+                  style={rowHeightStyle(column, row.from, row.to)}
                   on:click={() => insertAt(row.from, row.to)}
                 >
                   <span>{durationText(row.to - row.from)}</span>
@@ -408,7 +530,7 @@
                   class:is-compact={isCompact(item)}
                   class:has-overlap={itemOverlaps(item)}
                   class="week-block"
-                  style={blockStyle(activity, item)}
+                  style={blockStyle(column, activity, item)}
                   on:click={() => blockClick(item.id)}
                   on:keydown={(event) => blockKeydown(event, item.id)}
                   on:dblclick|stopPropagation={() => onOpenItem(item.id)}

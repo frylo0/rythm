@@ -196,11 +196,16 @@ export function normalizeState(state: unknown): RythmState {
     weekStartClockMin: 420,
     timeStepMin: 5,
     pxPer5Min: 2,
+    smartWeekGrid: true,
     mobileWeekScale: 1,
     firstDayLabel: "Пн",
     theme: "system",
     glowEnabled: true
-  }, rawSettings, { theme: normalizeTheme(rawSettings.theme), glowEnabled: rawSettings.glowEnabled !== false });
+  }, rawSettings, {
+    theme: normalizeTheme(rawSettings.theme),
+    glowEnabled: rawSettings.glowEnabled !== false,
+    smartWeekGrid: rawSettings.smartWeekGrid !== false
+  });
   return {
     schemaVersion: 2,
     settings,

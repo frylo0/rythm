@@ -1,15 +1,15 @@
 
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(var(--day-count), 224px);
-  gap: 12px;
-  min-width: calc(var(--day-count) * 224px + (var(--day-count) - 1) * 12px);
+  grid-template-columns: repeat(var(--day-count), 14em);
+  gap: 0.75em;
+  min-width: calc(var(--day-count) * 14em + (var(--day-count) - 1) * 0.75em);
 }
 
 .day-column {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 1em;
   background: var(--panel);
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -21,7 +21,7 @@
 
 .day-column.is-today {
   border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
-  box-shadow: 0 16px 40px rgba(37, 99, 235, 0.16);
+  box-shadow: 0 1em 2.5em rgba(37, 99, 235, 0.16);
 }
 
 .day-column.is-today header {
@@ -33,12 +33,12 @@
 .day-column.is-today header strong::after {
   content: "";
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-left: 7px;
+  width: 0.4375em;
+  height: 0.4375em;
+  margin-left: 0.4375em;
   border-radius: 999px;
   background: var(--accent-2);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+  box-shadow: 0 0 0 0.25em rgba(37, 99, 235, 0.14);
   vertical-align: middle;
 }
 
@@ -53,48 +53,53 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
+  padding: 0.625em;
   border-bottom: 1px solid var(--line);
-  border-radius: 15px 15px 0 0;
+  border-radius: 0.9375em 0.9375em 0 0;
   background: var(--soft);
 }
 
 .day-body {
+  position: relative;
   display: grid;
   gap: 0;
-  padding: 8px;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      rgba(100, 116, 139, 0.08) 0,
-      rgba(100, 116, 139, 0.08) 1px,
-      transparent 1px,
-      transparent calc((var(--five-min-height, 2px) * 12))
-    ),
-    var(--panel);
+  padding: 0.5em;
+  background: var(--panel);
+}
+
+.time-rule {
+  position: absolute;
+  left: 0.5em;
+  right: 0.5em;
+  z-index: 0;
+  border-top: 1px solid rgba(100, 116, 139, 0.12);
+  pointer-events: none;
 }
 
 .week-block,
 .gap,
 .day-end {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
   width: 100%;
   border: 0;
-  border-radius: 12px;
+  border-radius: 0.75em;
   text-align: left;
   transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+  overflow: hidden;
 }
 
 .week-block {
-  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px 40px;
+  grid-template-columns: minmax(0, 1fr) 3.375em 2.5em;
   gap: 0;
   align-items: stretch;
   min-width: 0;
-  min-height: 20px;
+  min-height: 0;
   padding: 0;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
+  border-radius: 0.5em;
   background: var(--block-bg);
   color: var(--block-text);
   box-shadow:
@@ -108,7 +113,7 @@
 }
 
 .week-block.is-editing {
-  grid-template-columns: minmax(0, 1fr) 78px 58px;
+  grid-template-columns: minmax(0, 1fr) 4.875em 3.625em;
 }
 
 .week-block:hover {
@@ -116,7 +121,7 @@
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.28),
     inset 0 -1px 0 rgba(15, 23, 42, 0.2),
-    0 4px 14px rgba(15, 23, 42, 0.13);
+    0 0.25em 0.875em rgba(15, 23, 42, 0.13);
 }
 
 .week-block.has-overlap {
@@ -129,12 +134,12 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 3px 7px;
+  padding: 0.1875em 0.4375em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  font-size: 12px;
+  font-size: 0.75em;
   line-height: 1.1;
   cursor: grab;
   touch-action: none;
@@ -154,13 +159,13 @@
 .week-block-times {
   display: grid;
   grid-template-rows: 1fr 1fr;
-  min-width: 54px;
+  min-width: 3.375em;
   background: rgba(255, 255, 255, 0.03);
   line-height: 1;
 }
 
 .week-block.is-editing .week-block-times {
-  min-width: 78px;
+  min-width: 4.875em;
 }
 
 .week-block-times.has-single-time {
@@ -171,8 +176,8 @@
   display: grid;
   place-items: center;
   min-height: 0;
-  padding: 1px 3px;
-  font-size: 10px;
+  padding: 0.0625em 0.1875em;
+  font-size: 0.625em;
 }
 
 .week-block-times input,
@@ -180,12 +185,12 @@
   width: 100%;
   min-width: 0;
   height: 100%;
-  padding: 0 3px;
+  padding: 0 0.1875em;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: inherit;
-  font-size: 9px;
+  font-size: 0.5625em;
   line-height: 1;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -219,10 +224,10 @@
 .week-block-duration {
   display: grid;
   place-items: center;
-  min-width: 40px;
-  padding: 1px 4px;
+  min-width: 2.5em;
+  padding: 0.0625em 0.25em;
   font-style: normal;
-  font-size: 10px;
+  font-size: 0.625em;
   line-height: 1;
   background: rgba(0, 0, 0, 0.08);
 }
@@ -230,7 +235,7 @@
 .week-block-duration.is-editable {
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  min-width: 58px;
+  min-width: 3.625em;
   padding: 0;
 }
 
@@ -240,15 +245,15 @@
 
 .week-block small {
   grid-column: 1 / -1;
-  padding: 0 7px 3px;
+  padding: 0 0.4375em 0.1875em;
   opacity: 0.75;
-  font-size: 10px;
+  font-size: 0.625em;
 }
 
 .week-block.is-compact .week-block-title,
 .week-block.is-compact .week-block-duration,
 .week-block.is-compact .week-block-times span {
-  font-size: 9px;
+  font-size: 0.5625em;
 }
 
 .resize-trigger {
@@ -261,7 +266,7 @@
   right: 0;
   z-index: 2;
   display: block;
-  height: 4px;
+  height: 0.25em;
   background: rgba(255, 255, 255, 0.34);
   cursor: ns-resize;
   touch-action: none;
@@ -279,10 +284,10 @@
   display: grid;
   place-items: center;
   border: 1px dashed rgba(100, 116, 139, 0.28);
-  border-radius: 8px;
+  border-radius: 0.5em;
   background: rgba(100, 116, 139, 0.06);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.6875em;
   cursor: pointer;
   opacity: 0.74;
 }
@@ -296,10 +301,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  min-height: 26px;
-  padding: 4px 8px;
-  border-radius: 7px;
-  background: repeating-linear-gradient(90deg, transparent, transparent 6px, rgba(100, 116, 139, 0.22) 6px, rgba(100, 116, 139, 0.22) 10px);
+  min-height: 1.625em;
+  padding: 0.25em 0.5em;
+  border-radius: 0.4375em;
+  background: repeating-linear-gradient(90deg, transparent, transparent 0.375em, rgba(100, 116, 139, 0.22) 0.375em, rgba(100, 116, 139, 0.22) 0.625em);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75em;
 }
