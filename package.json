@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "NODE_ENV=development node src/server/server.js",
     "build": "node scripts/build.js",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
     "start": "NODE_ENV=production node src/server/server.js",
     "deploy:vps": "scripts/deploy-vps.sh",
     "setup:env": "node scripts/setup-env.js",
@@ -17,12 +18,13 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "express": "^4.19.2",
-    "jquery": "^3.7.1"
+    "express": "^4.19.2"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "svelte": "^5.19.7",
+    "svelte-check": "^4.1.4",
+    "typescript": "^5.7.3",
     "vite": "^6.1.0"
   }
 }

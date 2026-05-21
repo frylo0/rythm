@@ -757,6 +757,24 @@ textarea {
   backdrop-filter: blur(5px);
 }
 
+.modal-backdrop-button {
+  border: 0;
+}
+
+.app-svelte-modal {
+  display: block;
+  pointer-events: none;
+}
+
+.app-svelte-modal .modal-dialog {
+  pointer-events: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
 .app-modal {
   border: 1px solid var(--line);
   border-radius: 22px;
