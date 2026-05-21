@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs/promises");
 const express = require("express");
 const { createAuthMiddleware } = require("./auth");
 const { readState, writeState, compareUpdatedAt } = require("./state-store");
@@ -7,6 +8,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 const CLIENT_DIR = path.join(process.cwd(), "src", "client");
+const isDev = process.env.NODE_ENV === "development";
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -64,25 +66,67 @@ app.put("/api/state", auth.requireAuth, async (req, res, next) => {
   }
 });
 
-app.use("/src/client", express.static(CLIENT_DIR, {
-  etag: true,
-  maxAge: process.env.NODE_ENV === "production" ? "1h" : 0
-}));
+async function installFrontend() {
+  if (!isDev) {
+    app.use("/src/client", express.static(CLIENT_DIR, {
+      etag: true,
+      maxAge: "1h"
+    }));
+  }
 
-app.use(express.static(PUBLIC_DIR, {
-  etag: true,
-  maxAge: process.env.NODE_ENV === "production" ? "1h" : 0
-}));
+  app.use(express.static(PUBLIC_DIR, {
+    etag: true,
+    index: false,
+    maxAge: isDev ? 0 : "1h"
+  }));
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
-});
+  if (isDev) {
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      appType: "custom",
+      server: { middlewareMode: true }
+    });
+    app.use(vite.middlewares);
+    app.get("*", async (req, res, next) => {
+      try {
+        const templatePath = path.join(PUBLIC_DIR, "index.template.html");
+        const template = await fs.readFile(templatePath, "utf8");
+        const html = await vite.transformIndexHtml(
+          req.originalUrl,
+          template
+            .replace("    <!-- RYTHM_CLIENT_CSS -->", "")
+            .replace("    <!-- RYTHM_CLIENT_JS -->", '    <script type="module" src="/src/client/main.ts"></script>')
+        );
+        res.status(200).type("html").send(html);
+      } catch (error) {
+        vite.ssrFixStacktrace(error);
+        next(error);
+      }
+    });
+    return;
+  }
 
-app.use((error, req, res, next) => {
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+  });
+}
+
+function installErrorHandler() {
+  app.use((error, req, res, next) => {
+    console.error(error);
+    res.status(500).json({ ok: false, code: "SERVER_ERROR" });
+  });
+}
+
+async function main() {
+  await installFrontend();
+  installErrorHandler();
+  app.listen(PORT, () => {
+    console.log(`rythm listening on http://localhost:${PORT}`);
+  });
+}
+
+main().catch((error) => {
   console.error(error);
-  res.status(500).json({ ok: false, code: "SERVER_ERROR" });
-});
-
-app.listen(PORT, () => {
-  console.log(`rythm listening on http://localhost:${PORT}`);
+  process.exit(1);
 });

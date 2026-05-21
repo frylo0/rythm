@@ -43,15 +43,23 @@
     focusToday();
   });
 
+  function rowHeight(from: number, to: number): number {
+    const duration = Math.max(0, to - from);
+    return Math.max(20, (duration / 5) * (state.settings.pxPer5Min || 2));
+  }
+
   function blockStyle(activity: Activity | undefined, item: ActivityTimelineItem): string {
-    const px = Math.max(26, ((item.endAbsMin - item.startAbsMin) / 5) * (state.settings.pxPer5Min || 2));
+    const px = rowHeight(item.startAbsMin, item.endAbsMin);
     const color = safeColor(activity ? activity.color : "#e5e7eb");
-    return `min-height:${px}px;background:${color};color:${textColor(color)}`;
+    return `min-height:${px}px;--block-bg:${color};--block-text:${textColor(color)}`;
   }
 
   function gapHeight(from: number, to: number): string {
-    const duration = Math.max(0, to - from);
-    return `min-height:${Math.min(46, Math.max(14, duration / 12))}px`;
+    return `min-height:${rowHeight(from, to)}px`;
+  }
+
+  function isCompact(item: ActivityTimelineItem): boolean {
+    return item.endAbsMin - item.startAbsMin <= 15;
   }
 
   type ColumnRow =
@@ -158,7 +166,7 @@
     </div>
   {/if}
   <div class="week-scroll">
-    <div class="week-grid" style={`--day-count:${columns.length}`}>
+    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${state.settings.pxPer5Min || 2}px`}>
       {#each columns as column}
         {@const blocks = blocksInColumn(state, column)}
         <section class:is-extra={column.extra} class:is-today={column.index === todayIndex && !column.extra} class="day-column" tabindex="-1" aria-current={column.index === todayIndex && !column.extra ? "date" : undefined}>
@@ -181,14 +189,23 @@
               {:else}
                 {@const item = row.item}
                 {@const activity = map.get(item.activityId)}
-                <button type="button" class="week-block" style={blockStyle(activity, item)} on:click={() => blockClick(item.id)}>
-                  <strong>{activity ? activity.name : "Нет активности"}</strong>
+                <button
+                  type="button"
+                  class:is-editing={$editMode}
+                  class:is-compact={isCompact(item)}
+                  class="week-block"
+                  style={blockStyle(activity, item)}
+                  on:click={() => blockClick(item.id)}
+                >
+                  <span class="resize-trigger resize-trigger-start" aria-hidden="true"></span>
+                  <strong class="week-block-title">{activity ? activity.name : "Нет активности"}</strong>
                   <span class="week-block-times">
                     <span>{formatClock(item.startAbsMin, state)}</span>
                     <span>{formatClock(item.endAbsMin, state)}</span>
                   </span>
-                  <em>{durationText(item.endAbsMin - item.startAbsMin)}</em>
+                  <em class="week-block-duration">{durationText(item.endAbsMin - item.startAbsMin)}</em>
                   {#if activity?.archived}<small>архив</small>{/if}
+                  <span class="resize-trigger resize-trigger-end" aria-hidden="true"></span>
                 </button>
               {/if}
             {/each}

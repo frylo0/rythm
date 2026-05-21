@@ -489,7 +489,7 @@ textarea {
   border-radius: 16px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  overflow: visible;
+  overflow: hidden;
 }
 
 .day-column:focus {
@@ -532,13 +532,23 @@ textarea {
   align-items: center;
   padding: 10px;
   border-bottom: 1px solid var(--line);
+  border-radius: 15px 15px 0 0;
   background: var(--soft);
 }
 
 .day-body {
   display: grid;
-  gap: 6px;
+  gap: 0;
   padding: 8px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(100, 116, 139, 0.08) 0,
+      rgba(100, 116, 139, 0.08) 1px,
+      transparent 1px,
+      transparent calc((var(--five-min-height, 2px) * 12))
+    ),
+    var(--panel);
 }
 
 .week-block,
@@ -552,66 +562,123 @@ textarea {
 }
 
 .week-block {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 6px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) 56px 42px;
+  gap: 0;
+  align-items: stretch;
   min-width: 0;
-  min-height: 26px;
-  padding: 4px 7px;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: var(--block-bg);
+  color: var(--block-text);
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .week-block:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 4px 14px rgba(15, 23, 42, 0.13);
 }
 
-.week-block strong {
+.week-block-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 3px 7px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+  font-size: 12px;
+  line-height: 1.1;
 }
 
 .week-block-times,
 .week-block-times span,
-.week-block em {
+.week-block-duration {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  opacity: 0.82;
-  font-size: 11px;
 }
 
 .week-block-times {
   display: grid;
-  gap: 0;
-  line-height: 0.95;
+  grid-template-rows: 1fr 1fr;
+  min-width: 56px;
+  background: rgba(255, 255, 255, 0.03);
+  line-height: 1;
 }
 
 .week-block-times span {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 1px 3px;
   font-size: 10px;
 }
 
-.week-block em {
+.week-block-times span + span {
+  border-top: 2px solid rgba(0, 0, 0, 0.05);
+}
+
+.week-block-duration {
+  display: grid;
+  place-items: center;
+  min-width: 42px;
+  padding: 1px 4px;
   font-style: normal;
-  opacity: 0.9;
+  font-size: 10px;
+  line-height: 1;
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .week-block small {
   grid-column: 1 / -1;
+  padding: 0 7px 3px;
   opacity: 0.75;
+  font-size: 10px;
+}
+
+.week-block.is-compact .week-block-title,
+.week-block.is-compact .week-block-duration,
+.week-block.is-compact .week-block-times span {
+  font-size: 9px;
+}
+
+.resize-trigger {
+  display: none;
+}
+
+.week-block.is-editing .resize-trigger {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: block;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.week-block.is-editing .resize-trigger-start {
+  top: 0;
+}
+
+.week-block.is-editing .resize-trigger-end {
+  bottom: 0;
 }
 
 .gap {
   display: grid;
   place-items: center;
-  border: 1px dashed var(--line);
-  background: rgba(100, 116, 139, 0.08);
+  border: 1px dashed rgba(100, 116, 139, 0.28);
+  border-radius: 8px;
+  background: rgba(100, 116, 139, 0.06);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
-  opacity: 0.42;
+  opacity: 0.74;
 }
 
 .gap.is-editable,
@@ -1104,10 +1171,6 @@ textarea {
 
   .stats-table tbody th {
     padding-left: calc(8px + (var(--level, 1) - 1) * 10px);
-  }
-
-  .gap {
-    display: none;
   }
 
   .gap.is-editable {
