@@ -4,6 +4,7 @@
     DAY_MIN,
     activityMap,
     blocksInColumn,
+    childrenMap,
     dayColumns,
     descendantsOf,
     durationText,
@@ -21,6 +22,7 @@
     level: number;
     days: number[];
     total: number;
+    direct?: boolean;
   }
 
   function addTotals(row: StatsRow, dayIndex: number, minutes: number): void {
@@ -28,7 +30,7 @@
     row.total += minutes;
   }
 
-  function ensureRow(rows: Map<string, StatsRow>, activity: Activity, level: number, label?: string): StatsRow {
+  function ensureRow(rows: Map<string, StatsRow>, activity: Activity, level: number, label?: string, direct = false): StatsRow {
     const key = label ? `${activity.id}:${label}` : activity.id;
     if (!rows.has(key)) {
       rows.set(key, {
@@ -38,7 +40,8 @@
         color: activity.color,
         level,
         days: [],
-        total: 0
+        total: 0,
+        direct
       });
     }
     return rows.get(key)!;
@@ -56,6 +59,7 @@
 
   function buildRows(columns: DayColumn[]): StatsRow[] {
     const map = activityMap(state);
+    const tree = childrenMap(state);
     const rows = new Map<string, StatsRow>();
     columns.forEach((column, dayIndex) => {
       blocksInColumn(state, column).forEach((item) => {
@@ -65,11 +69,31 @@
         const chain = ancestorChain(activity, map);
         chain.forEach((node, index) => addTotals(ensureRow(rows, node, index + 1), dayIndex, minutes));
         if (descendantsOf(activity.id, state).length) {
-          addTotals(ensureRow(rows, activity, chain.length + 1, `Напрямую как ${activity.name}`), dayIndex, minutes);
+          addTotals(ensureRow(rows, activity, chain.length + 1, "direct", true), dayIndex, minutes);
         }
       });
     });
-    return Array.from(rows.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+    function collect(activity: Activity, level: number): StatsRow[] {
+      const own = rows.get(activity.id);
+      const direct = rows.get(`${activity.id}:direct`);
+      const childRows = (tree.get(activity.id) || []).flatMap((child) => collect(child, level + 1));
+      if (!own && !direct && !childRows.length) return [];
+      const normalizedOwn = own || {
+        key: activity.id,
+        id: activity.id,
+        name: activity.name,
+        color: activity.color,
+        level,
+        days: [],
+        total: 0
+      };
+      normalizedOwn.level = level;
+      if (direct) direct.level = level + 1;
+      return [normalizedOwn, ...(direct ? [direct] : []), ...childRows];
+    }
+
+    return (tree.get("root") || []).flatMap((activity) => collect(activity, 1));
   }
 
   $: columns = dayColumns(state);
@@ -99,9 +123,11 @@
       </thead>
       <tbody>
         {#each rows as row (row.key)}
-          <tr>
+          <tr class:is-direct={row.direct}>
             <th style={`--marker:${safeColor(row.color)};--level:${row.level}`}>
-              <span class="activity-marker"></span>{row.name}
+              <span class="activity-marker"></span>
+              {#if row.direct}<i class="bi bi-arrow-return-right direct-icon" aria-label="Использовано напрямую"></i>{/if}
+              <span>{row.direct ? "сам блок" : row.name}</span>
             </th>
             {#each columns as column, index}
               <td>{row.days[index] ? durationText(row.days[index]) : "—"}</td>

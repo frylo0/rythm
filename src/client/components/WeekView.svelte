@@ -7,6 +7,7 @@
     blocksInColumn,
     clampToStep,
     DAY_MIN,
+    colorWithAlpha,
     dayColumns,
     durationText,
     formatClock,
@@ -76,7 +77,8 @@
   function blockStyle(activity: Activity | undefined, item: ActivityTimelineItem): string {
     const px = rowHeight(item.startAbsMin, item.endAbsMin);
     const color = safeColor(activity ? activity.color : "#e5e7eb");
-    return `min-height:${px}px;--block-bg:${color};--block-text:${textColor(color)}`;
+    const background = colorWithAlpha(color, activity?.opacity ?? 1);
+    return `min-height:${px}px;--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
   }
 
   function gapHeight(from: number, to: number): string {
@@ -227,6 +229,13 @@
     updateDuration(item, Number(hours || 0) * 60 + Number(minutes || 0));
   }
 
+  function adjustMobileScale(delta: number): void {
+    mutateState((draft) => {
+      const current = draft.settings.mobileWeekScale || 1;
+      draft.settings.mobileWeekScale = Math.min(1.8, Math.max(0.7, Math.round((current + delta) * 100) / 100));
+    });
+  }
+
   function minuteFromPointer(event: PointerEvent, duration = 0): number | null {
     const body = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".day-body");
     if (!body) return null;
@@ -307,9 +316,19 @@
       <h1>Неделя</h1>
     </div>
     {#if $editMode}
-      <button class="btn btn-dark btn-sm icon-button" type="button" title="Добавить активность" aria-label="Добавить активность" on:click={() => (pickerOpen = true)}>
-        <i class="bi bi-plus-lg" aria-hidden="true"></i>
-      </button>
+      <div class="week-head-actions">
+        <span class="mobile-scale-actions">
+          <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Уменьшить неделю" aria-label="Уменьшить неделю" on:click={() => adjustMobileScale(-0.05)}>
+            <i class="bi bi-dash-lg" aria-hidden="true"></i>
+          </button>
+          <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Увеличить неделю" aria-label="Увеличить неделю" on:click={() => adjustMobileScale(0.05)}>
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+          </button>
+        </span>
+        <button class="btn btn-dark btn-sm icon-button" type="button" title="Добавить активность" aria-label="Добавить активность" on:click={() => (pickerOpen = true)}>
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        </button>
+      </div>
     {/if}
   </div>
   {#if visibleWarnings.length}
@@ -320,7 +339,7 @@
     </div>
   {/if}
   <div class="week-scroll">
-    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${state.settings.pxPer5Min || 2}px`}>
+    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${state.settings.pxPer5Min || 2}px;--mobile-week-scale:${state.settings.mobileWeekScale || 1}`}>
       {#each columns as column}
         {@const blocks = blocksInColumn(state, column)}
         <section class:is-extra={column.extra} class:is-today={column.index === todayIndex && !column.extra} class="day-column" tabindex="-1" aria-current={column.index === todayIndex && !column.extra ? "date" : undefined}>

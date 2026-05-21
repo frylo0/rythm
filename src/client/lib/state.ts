@@ -5,7 +5,6 @@ import type {
   DayEndTimelineItem,
   RythmSettings,
   RythmState,
-  TimeRange,
   TimelineItem
 } from "./types";
 
@@ -162,17 +161,31 @@ export function safeColor(hex: string | null | undefined, fallback = "#e5e7eb"):
   return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 }
 
+export function colorWithAlpha(hex: string | null | undefined, alpha: number | null | undefined): string {
+  const clean = safeColor(hex).replace("#", "");
+  const opacity = Math.min(1, Math.max(0.08, Number(alpha ?? 1)));
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 export function touchState<T extends { updatedAt: string }>(state: T): T {
   state.updatedAt = now();
   return state;
 }
 
-function asObject(value: unknown): Record<string, any> {
-  return value && typeof value === "object" ? value as Record<string, any> : {};
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
 function normalizeTheme(value: unknown): RythmSettings["theme"] {
   return value === "light" || value === "dark" || value === "system" ? value : "system";
+}
+
+function normalizeOpacity(value: unknown): number {
+  const opacity = Number(value ?? 1);
+  return Number.isFinite(opacity) ? Math.min(1, Math.max(0.08, opacity)) : 1;
 }
 
 export function normalizeState(state: unknown): RythmState {
@@ -183,13 +196,20 @@ export function normalizeState(state: unknown): RythmState {
     weekStartClockMin: 420,
     timeStepMin: 5,
     pxPer5Min: 2,
+    mobileWeekScale: 1,
     firstDayLabel: "Пн",
-    theme: "system"
-  }, rawSettings, { theme: normalizeTheme(rawSettings.theme) });
+    theme: "system",
+    glowEnabled: true
+  }, rawSettings, { theme: normalizeTheme(rawSettings.theme), glowEnabled: rawSettings.glowEnabled !== false });
   return {
-    schemaVersion: Number(raw.schemaVersion || 1),
+    schemaVersion: 2,
     settings,
-    activities: Array.isArray(raw.activities) ? raw.activities as Activity[] : [],
+    activities: Array.isArray(raw.activities)
+      ? raw.activities.map((activity) => {
+        const rawActivity = asObject(activity);
+        return { ...(rawActivity as unknown as Activity), opacity: normalizeOpacity(rawActivity.opacity) };
+      })
+      : [],
     timeline: Array.isArray(raw.timeline) ? raw.timeline as TimelineItem[] : [],
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : now()
   };
@@ -229,11 +249,6 @@ export function validateState(state: RythmState): string[] {
     }
   });
   return Array.from(new Set(warnings));
-}
-
-export function canPlace(state: Pick<RythmState, "timeline">, candidate: TimeRange, ignoreId?: string): boolean {
-  const blocks = (state.timeline || []).filter((item): item is ActivityTimelineItem => item.type === "activity" && item.id !== ignoreId);
-  return !blocks.some((item) => candidate.startAbsMin < item.endAbsMin && candidate.endAbsMin > item.startAbsMin);
 }
 
 export function directChildrenOf(activityId: string, state: Pick<RythmState, "activities">): Activity[] {

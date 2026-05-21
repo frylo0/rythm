@@ -22,6 +22,7 @@ function baseActivity(name, color, duration, parentId = null) {
     parentId,
     name,
     color,
+    opacity: 1,
     defaultDurationMin: duration,
     archived: false,
     createdAt: now,
@@ -121,15 +122,17 @@ function createDefaultState() {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     updatedAt: now,
     settings: {
       authEnabled: Boolean(process.env.RYTHM_PASSWORD_HASH),
       weekStartClockMin: 420,
       timeStepMin: 5,
       pxPer5Min: 2,
+      mobileWeekScale: 1,
       firstDayLabel: "Пн",
-      theme: "system"
+      theme: "system",
+      glowEnabled: true
     },
     activities,
     timeline

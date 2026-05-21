@@ -79,6 +79,7 @@
       ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
       : theme;
     document.documentElement.setAttribute("data-bs-theme", resolvedTheme);
+    document.documentElement.dataset.glowEffects = state.settings.glowEnabled === false ? "off" : "on";
   }
 
   function openActivity(id: string | null): void {
@@ -151,7 +152,7 @@
         onUnauthorized: () => authRequired.set(true)
       });
       setSyncService(syncService);
-      const auth = await request("/api/auth/status").catch(() => ({ authEnabled: false, authenticated: true }));
+      const auth = await request<{ authEnabled: boolean; authenticated: boolean }>("/api/auth/status").catch(() => ({ authEnabled: false, authenticated: true }));
       if (auth.authEnabled && !auth.authenticated) {
         authRequired.set(true);
         return;

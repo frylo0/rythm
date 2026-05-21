@@ -5,8 +5,10 @@ import type { RequestError, RythmState, SyncService } from "./types";
 
 const STATE_KEY = "state";
 const DIRTY_KEY = "dirty";
+const SYNC_DEBOUNCE_MS = 900;
 
 let busy = false;
+let scheduledSync: ReturnType<typeof window.setTimeout> | null = null;
 
 interface SyncOptions {
   getState: () => RythmState | null;
@@ -23,20 +25,37 @@ function hasContent(state: RythmState | null | undefined): boolean {
   );
 }
 
+function asPayload(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
 export function createSync({ getState, setState, setStatus, onUnauthorized }: SyncOptions): SyncService {
+  function scheduleSync(delay = SYNC_DEBOUNCE_MS): void {
+    if (scheduledSync) {
+      window.clearTimeout(scheduledSync);
+    }
+    scheduledSync = window.setTimeout(() => {
+      scheduledSync = null;
+      syncNow();
+    }, delay);
+  }
+
   async function saveLocal(state: RythmState, dirty: boolean): Promise<void> {
     await set(STATE_KEY, state);
     await set(DIRTY_KEY, Boolean(dirty));
-    setStatus(navigator.onLine ? (dirty ? "Есть локальные изменения" : "Сохранено") : "Офлайн, есть локальные изменения");
+    setStatus(navigator.onLine ? (dirty ? "Ожидает синхронизации" : "Сохранено") : "Офлайн, есть локальные изменения");
   }
 
   async function saveAndSync(state: RythmState): Promise<void> {
     await saveLocal(state, true);
-    syncNow();
+    scheduleSync();
   }
 
   async function syncNow() {
-    if (busy) return;
+    if (busy) {
+      scheduleSync();
+      return;
+    }
     if (!navigator.onLine) {
       setStatus("Офлайн");
       return;
@@ -73,18 +92,19 @@ export function createSync({ getState, setState, setStatus, onUnauthorized }: Sy
           body: JSON.stringify({ state: localState })
         });
         await saveLocal(localState, false);
-        setStatus("Локальная версия отправлена");
+        setStatus("Сохранено на сервере");
       } else {
         await saveLocal(localState, false);
         setStatus("Сохранено");
       }
     } catch (error) {
       const syncError = error as RequestError;
+      const payload = asPayload(syncError.payload);
       if (syncError.status === 401) {
         setStatus("Нужен вход");
         onUnauthorized();
-      } else if (syncError.payload && syncError.payload.code === "SERVER_STATE_IS_NEWER" && syncError.payload.state) {
-        const serverState = normalizeState(syncError.payload.state);
+      } else if (payload.code === "SERVER_STATE_IS_NEWER" && payload.state) {
+        const serverState = normalizeState(payload.state);
         setState(serverState);
         await saveLocal(serverState, false);
         setStatus("Серверная версия свежее");
@@ -105,7 +125,7 @@ export function createSync({ getState, setState, setStatus, onUnauthorized }: Sy
     await syncNow();
   }
 
-  window.addEventListener("online", syncNow);
+  window.addEventListener("online", () => scheduleSync(100));
   window.addEventListener("offline", () => setStatus("Офлайн"));
 
   return { loadInitial, saveLocal, saveAndSync, syncNow };

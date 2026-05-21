@@ -13,14 +13,18 @@
   let authEnabled = false;
   let startClock = "07:00";
   let scale = 2;
+  let mobileWeekScale = 1;
   let theme: ThemeMode = "system";
+  let glowEnabled = true;
   let jsonText = "";
 
   $: if (open && state) {
     authEnabled = Boolean(state.settings.authEnabled);
     startClock = formatClock(0, state);
     scale = state.settings.pxPer5Min || 2;
+    mobileWeekScale = state.settings.mobileWeekScale || 1;
     theme = state.settings.theme || "system";
+    glowEnabled = state.settings.glowEnabled !== false;
     jsonText = JSON.stringify(state, null, 2);
   }
 
@@ -30,7 +34,9 @@
       const [hours, minutes] = startClock.split(":").map(Number);
       draft.settings.weekStartClockMin = hours * 60 + minutes;
       draft.settings.pxPer5Min = Number(scale || 2);
+      draft.settings.mobileWeekScale = Math.min(1.8, Math.max(0.7, Number(mobileWeekScale || 1)));
       draft.settings.theme = theme;
+      draft.settings.glowEnabled = glowEnabled;
     });
     onClose();
   }
@@ -70,7 +76,10 @@
       <input class="form-control" type="time" step="300" bind:value={startClock}>
     </label>
     <label class="form-label">Высота 5 минут, px
-      <input class="form-control" type="number" min="1" max="8" bind:value={scale}>
+      <input class="form-control" type="number" min="0.5" max="8" step="0.25" bind:value={scale}>
+    </label>
+    <label class="form-label">Мобильный масштаб недели
+      <input class="form-control" type="number" min="0.7" max="1.8" step="0.05" bind:value={mobileWeekScale}>
     </label>
   </div>
   <label class="form-label">Тема
@@ -79,6 +88,10 @@
       <option value="light">Светлая</option>
       <option value="dark">Тёмная</option>
     </select>
+  </label>
+  <label class="check-line form-check">
+    <input class="form-check-input" type="checkbox" bind:checked={glowEnabled}>
+    Включить glow-эффекты
   </label>
   <label class="form-label">JSON
     <textarea class="form-control font-monospace" rows="8" bind:value={jsonText}></textarea>

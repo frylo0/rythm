@@ -7,8 +7,10 @@ export interface RythmSettings {
   weekStartClockMin: number;
   timeStepMin: number;
   pxPer5Min: number;
+  mobileWeekScale: number;
   firstDayLabel: string;
   theme: ThemeMode;
+  glowEnabled: boolean;
 }
 
 export interface Activity {
@@ -16,6 +18,7 @@ export interface Activity {
   parentId: string | null;
   name: string;
   color: string;
+  opacity: number;
   defaultDurationMin: number;
   archived: boolean;
   createdAt: string;
@@ -60,13 +63,8 @@ export interface DayColumn {
   synthetic?: boolean;
 }
 
-export interface TimeRange {
-  startAbsMin: number;
-  endAbsMin: number;
-}
-
 export interface RequestError extends Error {
-  payload?: any;
+  payload?: unknown;
   status?: number;
 }
 
