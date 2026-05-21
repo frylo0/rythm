@@ -27,7 +27,7 @@
   const ROOT_FONT_PX = 16;
   const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
   const MIN_VIEW_BLOCK_HEIGHT_EM = 30 / ROOT_FONT_PX;
-  const MIN_EDIT_BLOCK_HEIGHT_EM = 56 / ROOT_FONT_PX;
+  const MIN_EDIT_BLOCK_HEIGHT_EM = 44 / ROOT_FONT_PX;
 
   export let state: RythmState;
   export let onOpenItem: (id: string) => void = () => {};
