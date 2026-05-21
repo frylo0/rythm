@@ -1,6 +1,10 @@
 node_modules/
+public/assets/
+public/index.html
+public/sw.js
 data/state.json
 data/state.json.tmp
 data/backups/
 npm-debug.log*
 .env
+.env.deploy

@@ -1,5 +1,9 @@
 node_modules
+public/assets
+public/index.html
+public/sw.js
 data
 .git
 .env
+.env.deploy
 npm-debug.log*

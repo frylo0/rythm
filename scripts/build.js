@@ -1,13 +1,14 @@
 const fs = require("fs/promises");
 const path = require("path");
 const zlib = require("zlib");
+const crypto = require("crypto");
+const { spawn } = require("child_process");
 
 const root = process.cwd();
 const vendorDir = path.join(root, "public", "vendor");
 const iconDir = path.join(root, "public", "icons");
 const requiredVendorFiles = [
   path.join(vendorDir, "bootstrap", "bootstrap.min.css"),
-  path.join(vendorDir, "bootstrap", "bootstrap.bundle.min.js"),
   path.join(vendorDir, "bootstrap-icons", "bootstrap-icons.min.css"),
   path.join(vendorDir, "bootstrap-icons", "fonts", "bootstrap-icons.woff2")
 ];
@@ -23,6 +24,86 @@ async function assertFile(filePath) {
   } catch {
     throw new Error(`Missing vendor file: ${path.relative(root, filePath)}. Commit public/vendor or restore Bootstrap assets before building.`);
   }
+}
+
+function run(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} ${args.join(" ")} exited with ${code}`));
+    });
+  });
+}
+
+async function readClientManifest() {
+  const manifestPath = path.join(root, "public", "assets", ".vite", "manifest.json");
+  const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+  const entry = manifest["src/client/main.ts"];
+  if (!entry || !entry.file) {
+    throw new Error("Vite manifest does not contain src/client/main.ts entry.");
+  }
+  return { manifest, entry };
+}
+
+function collectManifestAssets(manifest, entry) {
+  const files = new Set();
+  const visit = (chunk) => {
+    if (!chunk) return;
+    if (chunk.file) files.add(`/assets/${chunk.file}`);
+    (chunk.css || []).forEach((file) => files.add(`/assets/${file}`));
+    (chunk.assets || []).forEach((file) => files.add(`/assets/${file}`));
+    (chunk.imports || []).forEach((key) => visit(manifest[key]));
+    (chunk.dynamicImports || []).forEach((key) => visit(manifest[key]));
+  };
+  visit(entry);
+  return Array.from(files).sort();
+}
+
+async function updateIndexHtml(entry) {
+  const indexPath = path.join(root, "public", "index.html");
+  const templatePath = path.join(root, "public", "index.template.html");
+  const css = (entry.css || []).map((file) => `/assets/${file}`);
+  const js = `/assets/${entry.file}`;
+  const source = await fs.readFile(templatePath, "utf8");
+  await fs.writeFile(
+    indexPath,
+    source
+      .replace("    <!-- RYTHM_CLIENT_CSS -->", css.map((href) => `    <link rel="stylesheet" href="${href}">`).join("\n"))
+      .replace("    <!-- RYTHM_CLIENT_JS -->", `    <script type="module" src="${js}"></script>`)
+  );
+}
+
+async function updateServiceWorkerVersion(clientAssets) {
+  const swPath = path.join(root, "public", "sw.js");
+  const templatePath = path.join(root, "public", "sw.template.js");
+  const hashSource = crypto.createHash("sha256");
+  for (const asset of clientAssets) {
+    hashSource.update(asset);
+    hashSource.update(await fs.readFile(path.join(root, "public", asset)));
+  }
+  const hash = hashSource.digest("hex").slice(0, 12);
+  const shellAssets = [
+    "/",
+    "/index.html",
+    "/manifest.webmanifest",
+    "/vendor/bootstrap/bootstrap.min.css",
+    "/vendor/bootstrap-icons/bootstrap-icons.min.css",
+    "/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2",
+    "/vendor/bootstrap-icons/fonts/bootstrap-icons.woff",
+    "/icons/icon-32.png",
+    ...clientAssets,
+    "/icons/icon-192.png",
+    "/icons/icon-512.png"
+  ];
+  const source = await fs.readFile(templatePath, "utf8");
+  await fs.writeFile(
+    swPath,
+    source
+      .replace("__RYTHM_CACHE_NAME__", `rythm-shell-${hash}`)
+      .replace("__RYTHM_ASSETS__", JSON.stringify(shellAssets, null, 2))
+  );
 }
 
 function crc32(buffer) {
@@ -126,11 +207,15 @@ async function main() {
   await fs.mkdir(vendorDir, { recursive: true });
   await fs.mkdir(iconDir, { recursive: true });
   await Promise.all(requiredVendorFiles.map(assertFile));
-  await copyFile(path.join(root, "node_modules", "jquery", "dist", "jquery.min.js"), path.join(vendorDir, "jquery.min.js"));
+  await run(path.join(root, "node_modules", ".bin", "vite"), ["build"]);
+  const { manifest, entry } = await readClientManifest();
+  const clientAssets = collectManifestAssets(manifest, entry);
+  await updateIndexHtml(entry);
+  await updateServiceWorkerVersion(clientAssets);
   await fs.writeFile(path.join(iconDir, "icon-32.png"), createIcon(32));
   await fs.writeFile(path.join(iconDir, "icon-192.png"), createIcon(192));
   await fs.writeFile(path.join(iconDir, "icon-512.png"), createIcon(512));
-  console.log("Built local jQuery asset and PWA icons.");
+  console.log("Built Svelte client and PWA icons.");
 }
 
 main().catch((error) => {

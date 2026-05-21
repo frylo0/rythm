@@ -1,26 +1,5 @@
-const CACHE_NAME = "rythm-shell-v3";
-const ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.webmanifest",
-  "/vendor/jquery.min.js",
-  "/vendor/bootstrap/bootstrap.min.css",
-  "/vendor/bootstrap/bootstrap.bundle.min.js",
-  "/vendor/bootstrap-icons/bootstrap-icons.min.css",
-  "/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2",
-  "/icons/icon-32.png",
-  "/src/client/styles.css",
-  "/src/client/state.js",
-  "/src/client/storage.js",
-  "/src/client/sync.js",
-  "/src/client/color-picker.js",
-  "/src/client/week-view.js",
-  "/src/client/activities-view.js",
-  "/src/client/stats-view.js",
-  "/src/client/app.js",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png"
-];
+const CACHE_NAME = "__RYTHM_CACHE_NAME__";
+const ASSETS = __RYTHM_ASSETS__;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
