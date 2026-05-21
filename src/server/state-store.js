@@ -22,6 +22,7 @@ function baseActivity(name, color, duration, parentId = null) {
     parentId,
     name,
     color,
+    opacity: 1,
     defaultDurationMin: duration,
     archived: false,
     createdAt: now,
@@ -45,6 +46,13 @@ function createDefaultState() {
   for (let day = 0; day < 7; day += 1) {
     const base = day * 1440;
     const weekend = day >= 5;
+    timeline.push({
+      id: id("start"),
+      type: "dayStart",
+      atAbsMin: base,
+      createdAt: now,
+      updatedAt: now
+    });
     timeline.push({
       id: id("item"),
       type: "activity",
@@ -121,15 +129,19 @@ function createDefaultState() {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
     updatedAt: now,
     settings: {
       authEnabled: Boolean(process.env.RYTHM_PASSWORD_HASH),
       weekStartClockMin: 420,
       timeStepMin: 5,
       pxPer5Min: 2,
+      smartWeekGrid: true,
+      sleepActivityId: sleep.id,
+      mobileWeekScale: 1,
       firstDayLabel: "Пн",
-      theme: "system"
+      theme: "system",
+      glowEnabled: true
     },
     activities,
     timeline

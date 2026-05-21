@@ -1,6 +1,6 @@
 import type { RequestError } from "./types";
 
-export async function request<T = any>(url: string, options?: RequestInit): Promise<T> {
+export async function request<T = unknown>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, Object.assign({ credentials: "same-origin" }, options || {}));
   const json = await response.json().catch(() => ({}));
   if (!response.ok || json.ok === false) {

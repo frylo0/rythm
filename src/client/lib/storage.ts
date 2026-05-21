@@ -13,7 +13,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function get<T = any>(key: string): Promise<T | undefined> {
+export async function get<T = unknown>(key: string): Promise<T | undefined> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");

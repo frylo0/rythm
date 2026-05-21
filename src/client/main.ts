@@ -1,6 +1,7 @@
 import App from "./App.svelte";
 import { mount } from "svelte";
 import "./styles.css";
+import "./effects.css";
 
 const target = document.getElementById("app");
 if (!target) {

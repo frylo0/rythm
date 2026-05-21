@@ -1,5 +1,5 @@
 import { derived, get, writable } from "svelte/store";
-import { clone, durationText, normalizeState, touchState } from "./state";
+import { clone, normalizeState, reconcileDayModel, touchState } from "./state";
 import type { Activity, RythmState, SyncService, SystemPurchase, ViewName } from "./types";
 
 export const appState = writable<RythmState | null>(null);
@@ -26,6 +26,7 @@ export function mutateState(fn: (draft: RythmState) => void): void {
   if (!current) return;
   const draft = clone(current);
   fn(draft);
+  reconcileDayModel(draft);
   touchState(draft);
   appState.set(draft);
   syncService?.saveAndSync(draft);
@@ -53,35 +54,3 @@ export function switchView(view: ViewName): void {
 }
 
 export const activeActivities = derived(appState, ($state): Activity[] => ($state?.activities || []).filter((activity) => !activity.archived));
-
-export const selectedPurchase = derived(
-  [appState, selectedActivityId, selectedSystem],
-  ([$state, $selectedActivityId, $selectedSystem]) => {
-    if ($selectedSystem === "dayEnd") {
-      return {
-        title: "Конец дня",
-        meta: "системный маркер",
-        color: "#64748b",
-        icon: "bi-layout-sidebar-inset"
-      };
-    }
-    const activity = $state && $selectedActivityId
-      ? ($state.activities || []).find((item) => item.id === $selectedActivityId)
-      : null;
-    if (!activity) {
-      return {
-        title: "Ничего не выбрано",
-        meta: "выберите активность для вставки или замены",
-        color: "#cbd5e1",
-        icon: "bi-bag"
-      };
-    }
-    return {
-      title: activity.name,
-      meta: durationText(activity.defaultDurationMin),
-      color: activity.color,
-      icon: "bi-bag-check",
-      activity
-    };
-  }
-);

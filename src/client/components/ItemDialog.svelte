@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { activeActivities, mutateState, showToast } from "../lib/stores";
-  import { activityMap, canPlace, clampToStep, durationText, formatClock, now, parseClock, safeColor, uid } from "../lib/state";
-  import type { ActivityTimelineItem, DayEndTimelineItem, RythmState } from "../lib/types";
+  import { activeActivities, mutateState } from "../lib/stores";
+  import { activityMap, clampToStep, DAY_MIN, durationText, formatClock, now, parseClock, safeColor, uid } from "../lib/state";
+  import type { ActivityTimelineItem, DayEndTimelineItem, DayMarkerTimelineItem, DayStartTimelineItem, RythmState } from "../lib/types";
   import Modal from "./Modal.svelte";
   import PickerTree from "./PickerTree.svelte";
 
   export let state: RythmState;
   export let itemId: string | null = null;
   export let markerId: string | null = null;
+  export let draftItem: { activityId: string; startAbsMin: number; endAbsMin: number; replaceItemId?: string } | null = null;
   export let open: boolean = false;
   export let onClose: () => void = () => {};
 
@@ -15,25 +16,69 @@
   let startValue = "";
   let endValue = "";
   let durationMin = 5;
+  let durationHours = 0;
+  let durationMinutes = 5;
   let markerTime = "";
   let error = "";
   let pickerOpen = false;
   let splitMode = false;
   let splitFirst = 5;
+  let initializedFor = "";
 
   $: item = itemId ? state.timeline.find((entry): entry is ActivityTimelineItem => entry.type === "activity" && entry.id === itemId) : null;
-  $: marker = markerId ? state.timeline.find((entry): entry is DayEndTimelineItem => entry.type === "dayEnd" && entry.id === markerId) : null;
+  $: marker = markerId ? state.timeline.find((entry): entry is DayMarkerTimelineItem => (entry.type === "dayEnd" || entry.type === "dayStart") && entry.id === markerId) : null;
   $: map = state ? activityMap(state) : new Map();
-  $: currentActivity = item ? map.get(activityId || item.activityId) : null;
-  $: title = marker ? "Конец дня" : splitMode ? "Распил блока" : "Блок недели";
-  $: if (open) {
+  $: currentActivity = item || draftItem ? map.get(activityId || item?.activityId || draftItem?.activityId || "") : null;
+  $: title = marker ? (marker.type === "dayStart" ? "Начало дня" : "Конец дня") : splitMode ? "Распил блока" : draftItem ? "Добавить в неделю" : "Блок недели";
+  $: dialogContext = open
+    ? item
+      ? `item:${item.id}`
+      : draftItem
+        ? `draft:${draftItem.activityId}:${draftItem.startAbsMin}:${draftItem.endAbsMin}:${draftItem.replaceItemId || ""}`
+        : marker
+          ? `marker:${marker.id}`
+          : ""
+    : "";
+
+  $: if (!open && initializedFor) {
+    initializedFor = "";
+    splitMode = false;
+    pickerOpen = false;
+  }
+
+  $: if (open && dialogContext && dialogContext !== initializedFor) {
+    initializeDialog();
+    initializedFor = dialogContext;
+  }
+
+  function setDuration(minutes: number): void {
+    durationMin = Math.max(5, Math.round(Number(minutes || 0)));
+    durationHours = Math.floor(durationMin / 60);
+    durationMinutes = durationMin % 60;
+  }
+
+  function durationFromParts(): number {
+    return Math.max(5, Number(durationHours || 0) * 60 + Number(durationMinutes || 0));
+  }
+
+  function initializeDialog(): void {
     if (item) {
       activityId = item.activityId;
       startValue = formatClock(item.startAbsMin, state);
       endValue = formatClock(item.endAbsMin, state);
-      durationMin = item.endAbsMin - item.startAbsMin;
+      setDuration(item.endAbsMin - item.startAbsMin);
       splitFirst = Math.floor(durationMin / 2 / 5) * 5;
       error = "";
+      return;
+    }
+    if (draftItem) {
+      activityId = draftItem.activityId;
+      startValue = formatClock(draftItem.startAbsMin, state);
+      endValue = formatClock(draftItem.endAbsMin, state);
+      setDuration(draftItem.endAbsMin - draftItem.startAbsMin);
+      splitMode = false;
+      error = "";
+      return;
     }
     if (marker) {
       markerTime = formatClock(marker.atAbsMin, state);
@@ -42,47 +87,85 @@
   }
 
   function updateEndFromStart() {
-    if (!item) return;
-    const start = parseClock(startValue, item.startAbsMin, state);
-    endValue = formatClock(start + Number(durationMin || 5), state);
+    const fallbackStart = item?.startAbsMin ?? draftItem?.startAbsMin;
+    if (fallbackStart == null) return;
+    const start = parseClock(startValue, fallbackStart, state);
+    setDuration(durationFromParts());
+    endValue = formatClock(start + durationMin, state);
   }
 
   function updateDurationFromEnd() {
-    if (!item) return;
-    const start = parseClock(startValue, item.startAbsMin, state);
-    const end = parseClock(endValue, item.endAbsMin, state);
-    durationMin = Math.max(5, end - start);
+    const fallbackStart = item?.startAbsMin ?? draftItem?.startAbsMin;
+    const fallbackEnd = item?.endAbsMin ?? draftItem?.endAbsMin;
+    if (fallbackStart == null || fallbackEnd == null) return;
+    const start = parseClock(startValue, fallbackStart, state);
+    let end = parseClock(endValue, fallbackEnd, state);
+    while (end <= start) end += DAY_MIN;
+    setDuration(end - start);
   }
 
   function updateEndFromDuration() {
-    if (!item) return;
-    const start = parseClock(startValue, item.startAbsMin, state);
-    endValue = formatClock(start + Number(durationMin || 5), state);
+    const fallbackStart = item?.startAbsMin ?? draftItem?.startAbsMin;
+    if (fallbackStart == null) return;
+    const start = parseClock(startValue, fallbackStart, state);
+    setDuration(durationFromParts());
+    endValue = formatClock(start + durationMin, state);
   }
 
   function saveItem() {
-    if (!item) return;
+    if (!item && !draftItem) return;
     const step = state.settings.timeStepMin || 5;
-    const start = clampToStep(parseClock(startValue, item.startAbsMin, state), step);
-    const duration = clampToStep(durationMin, step);
+    const fallbackStart = item?.startAbsMin ?? draftItem!.startAbsMin;
+    const start = clampToStep(parseClock(startValue, fallbackStart, state), step);
+    const duration = clampToStep(durationFromParts(), step);
     const end = start + Math.max(5, duration);
-    if (!canPlace(state, { startAbsMin: start, endAbsMin: end }, item.id)) {
-      error = "Это изменение создаст пересечение.";
-      return;
-    }
     mutateState((draft) => {
-      const entry = draft.timeline.find((row) => row.id === item.id);
-      if (!entry || entry.type !== "activity") return;
-      entry.activityId = activityId;
-      entry.startAbsMin = start;
-      entry.endAbsMin = end;
-      entry.updatedAt = now();
+      if (item) {
+        const entry = draft.timeline.find((row) => row.id === item.id);
+        if (!entry || entry.type !== "activity") return;
+        if (entry.systemRole === "sleep") {
+          const endMarker = draft.timeline.find((row): row is DayEndTimelineItem => row.type === "dayEnd" && row.atAbsMin === entry.startAbsMin);
+          const startMarker = draft.timeline.find((row): row is DayStartTimelineItem => row.type === "dayStart" && row.atAbsMin === entry.endAbsMin);
+          if (endMarker) {
+            endMarker.atAbsMin = Math.min(start, end - step);
+            entry.startAbsMin = endMarker.atAbsMin;
+            endMarker.updatedAt = now();
+          }
+          if (startMarker) {
+            startMarker.atAbsMin = Math.max(end, entry.startAbsMin + step);
+            entry.endAbsMin = startMarker.atAbsMin;
+            startMarker.updatedAt = now();
+          }
+          entry.updatedAt = now();
+          return;
+        }
+        entry.activityId = activityId;
+        entry.startAbsMin = start;
+        entry.endAbsMin = end;
+        entry.updatedAt = now();
+        return;
+      }
+      if (!draftItem) return;
+      draft.timeline = draft.timeline.filter((entry) => entry.id !== draftItem.replaceItemId);
+      draft.timeline.push({
+        id: uid("item"),
+        type: "activity",
+        activityId,
+        startAbsMin: start,
+        endAbsMin: end,
+        createdAt: now(),
+        updatedAt: now()
+      });
     });
     onClose();
   }
 
   function deleteItem() {
     if (!item) return;
+    if (item.systemRole === "sleep") {
+      error = "Сон нельзя удалить.";
+      return;
+    }
     mutateState((draft) => {
       draft.timeline = draft.timeline.filter((entry) => entry.id !== item.id);
     });
@@ -91,6 +174,10 @@
 
   function splitItem() {
     if (!item) return;
+    if (item.systemRole === "sleep") {
+      error = "Сон нельзя распилить.";
+      return;
+    }
     const total = item.endAbsMin - item.startAbsMin;
     const first = Math.min(total - 5, Math.max(5, clampToStep(splitFirst, state.settings.timeStepMin || 5)));
     mutateState((draft) => {
@@ -110,7 +197,7 @@
     if (!marker) return;
     mutateState((draft) => {
       const entry = draft.timeline.find((row) => row.id === marker.id);
-      if (!entry || entry.type !== "dayEnd") return;
+      if (!entry || (entry.type !== "dayEnd" && entry.type !== "dayStart")) return;
       const next = parseClock(markerTime, marker.atAbsMin, state);
       entry.atAbsMin = clampToStep(next, draft.settings.timeStepMin || 5);
       entry.updatedAt = now();
@@ -120,7 +207,7 @@
 
   function deleteMarker() {
     if (!marker) return;
-    if (!confirm("Удалить системный конец дня?")) return;
+    if (!confirm(`Удалить системный маркер "${marker.type === "dayStart" ? "Начало дня" : "Конец дня"}"?`)) return;
     mutateState((draft) => {
       draft.timeline = draft.timeline.filter((entry) => entry.id !== marker.id);
     });
@@ -146,9 +233,9 @@
       <button type="button" class="btn btn-outline-secondary" on:click={() => (splitMode = false)}>Назад</button>
       <button type="button" class="btn btn-dark" on:click={splitItem}>Распилить</button>
     </div>
-  {:else if item}
+  {:else if item || draftItem}
     <div class="form-label">Активность</div>
-    <button class="activity-select-button" type="button" on:click={() => (pickerOpen = true)}>
+    <button class="activity-select-button" type="button" disabled={item?.systemRole === "sleep"} on:click={() => (pickerOpen = true)}>
       <span class="activity-marker" style={`--marker:${safeColor(currentActivity ? currentActivity.color : "#cbd5e1")}`}></span>
       <span>
         <strong>{currentActivity ? currentActivity.name : "Нет активности"}</strong>
@@ -163,15 +250,23 @@
       <label class="form-label">Конец
         <input class="form-control" type="time" step="300" bind:value={endValue} on:change={updateDurationFromEnd}>
       </label>
-      <label class="form-label">Длительность, мин
-        <input class="form-control" type="number" min="5" step="5" bind:value={durationMin} on:change={updateEndFromDuration}>
-      </label>
+      <fieldset class="duration-field">
+        <legend>Длительность</legend>
+        <label class="form-label">Часы
+          <input class="form-control" type="number" min="0" step="1" bind:value={durationHours} on:change={updateEndFromDuration}>
+        </label>
+        <label class="form-label">Минуты
+          <input class="form-control" type="number" min="0" max="55" step="5" bind:value={durationMinutes} on:change={updateEndFromDuration}>
+        </label>
+      </fieldset>
     </div>
     <small class="danger-text">{error}</small>
     <div class="dialog-actions">
-      <button type="button" class="btn btn-outline-danger" on:click={deleteItem}>Удалить</button>
-      <button type="button" class="btn btn-outline-secondary" on:click={() => (splitMode = true)}>Распилить</button>
-      <button type="button" class="btn btn-dark" on:click={saveItem}>Сохранить</button>
+      {#if item && item.systemRole !== "sleep"}
+        <button type="button" class="btn btn-outline-danger" on:click={deleteItem}>Удалить</button>
+        <button type="button" class="btn btn-outline-secondary" on:click={() => (splitMode = true)}>Распилить</button>
+      {/if}
+      <button type="button" class="btn btn-dark" on:click={saveItem}>{draftItem ? "Добавить" : "Сохранить"}</button>
     </div>
   {/if}
 </Modal>
