@@ -27,7 +27,7 @@
   const ROOT_FONT_PX = 16;
   const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
   const MIN_VIEW_BLOCK_HEIGHT_EM = 30 / ROOT_FONT_PX;
-  const MIN_EDIT_BLOCK_HEIGHT_EM = 50 / ROOT_FONT_PX;
+  const MIN_EDIT_BLOCK_HEIGHT_EM = 56 / ROOT_FONT_PX;
 
   export let state: RythmState;
   export let onOpenItem: (id: string) => void = () => {};
@@ -164,7 +164,7 @@
   }
 
   function rowHeightStyle(column: DayColumn, from: number, to: number, minHeightEm = MIN_GAP_HEIGHT_EM): string {
-    return `height:${rowHeightEm(column, from, to, minHeightEm)}em`;
+    return `height:${rowHeightEm(column, from, to, minHeightEm)}em;min-height:${minHeightEm}em`;
   }
 
   function offsetEm(column: DayColumn, atAbsMin: number, layout = renderLayout): number {
@@ -182,18 +182,19 @@
     return rules;
   }
 
-  function blockStyle(column: DayColumn, activity: Activity | undefined, item: ActivityTimelineItem): string {
+  function blockStyle(column: DayColumn, activity: Activity | undefined, item: ActivityTimelineItem, editing: boolean): string {
     const color = safeColor(activity ? activity.color : "#e5e7eb");
     const background = colorWithAlpha(color, activity?.opacity ?? 1);
-    return `${rowHeightStyle(column, item.startAbsMin, item.endAbsMin, blockMinHeightEm($editMode))};--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
+    return `${rowHeightStyle(column, item.startAbsMin, item.endAbsMin, blockMinHeightEm(editing))};--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
   }
 
-  function floatingBlockStyle(activity: Activity | undefined, item: ActivityTimelineItem): string {
+  function floatingBlockStyle(activity: Activity | undefined, item: ActivityTimelineItem, editing: boolean): string {
     const color = safeColor(activity ? activity.color : "#e5e7eb");
     const background = colorWithAlpha(color, activity?.opacity ?? 1);
     const durationSlots = Math.max(1, (item.endAbsMin - item.startAbsMin) / renderLayout.step);
-    const height = Math.max(blockMinHeightEm($editMode), durationSlots * renderLayout.baseSlotEm);
-    return `height:${height}em;--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
+    const minHeight = blockMinHeightEm(editing);
+    const height = Math.max(minHeight, durationSlots * renderLayout.baseSlotEm);
+    return `height:${height}em;min-height:${minHeight}em;--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
   }
 
   function isCompact(item: ActivityTimelineItem): boolean {
@@ -634,7 +635,7 @@
                   class:has-overlap={itemOverlaps(item)}
                   class:is-outside-day={isOutsideDay(item, column)}
                   class="week-block"
-                  style={blockStyle(column, activity, item)}
+                  style={blockStyle(column, activity, item, $editMode)}
                   on:click={() => blockClick(item.id)}
                   on:keydown={(event) => blockKeydown(event, item.id)}
                   on:dblclick|stopPropagation={() => onOpenItem(item.id)}
@@ -682,7 +683,7 @@
                     class:is-compact={isCompact(item)}
                     class:has-overlap={itemOverlaps(item)}
                     class="week-block is-outside-day"
-                    style={floatingBlockStyle(activity, item)}
+                    style={floatingBlockStyle(activity, item, $editMode)}
                     on:click={() => blockClick(item.id)}
                     on:keydown={(event) => blockKeydown(event, item.id)}
                     on:dblclick|stopPropagation={() => onOpenItem(item.id)}
@@ -720,7 +721,7 @@
                 class:is-editing={$editMode}
                 class:is-compact={isCompact(sleep)}
                 class="week-block system-sleep"
-                style={blockStyle(column, activity, sleep)}
+                style={blockStyle(column, activity, sleep, $editMode)}
                 on:click={() => blockClick(sleep.id)}
                 on:keydown={(event) => blockKeydown(event, sleep.id)}
                 on:dblclick|stopPropagation={() => onOpenItem(sleep.id)}
