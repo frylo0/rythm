@@ -22,7 +22,7 @@
     syncStatus,
     toastMessage
   } from "./lib/stores";
-  import type { RythmState, SyncService } from "./lib/types";
+  import type { RythmState, SyncService, ViewName } from "./lib/types";
 
   let loginPassword = "";
   let loginError = "";
@@ -32,10 +32,34 @@
   let itemDialogOpen = false;
   let itemId: string | null = null;
   let markerId: string | null = null;
+  let syncingViewToUrl = false;
 
   $: hasPicker = $currentView === "week" && $editMode;
   $: syncClass = classifySync($syncStatus);
   $: applyTheme($appState);
+
+  function readViewFromUrl(): ViewName {
+    const value = new URLSearchParams(window.location.search).get("view");
+    return value === "activities" || value === "stats" || value === "week" ? value : "week";
+  }
+
+  function writeViewToUrl(view: ViewName): void {
+    const url = new URL(window.location.href);
+    if (view === "week") {
+      url.searchParams.delete("view");
+    } else {
+      url.searchParams.set("view", view);
+    }
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      window.history.pushState({ view }, "", next);
+    }
+  }
+
+  function navigate(view: ViewName): void {
+    switchView(view);
+  }
 
   function classifySync(status: string): string {
     const text = String(status || "").toLowerCase();
@@ -98,21 +122,41 @@
     }
   }
 
-  onMount(async () => {
-    syncService = createSync({
-      getState: () => get(appState),
-      setState,
-      setStatus: (status) => syncStatus.set(status),
-      onUnauthorized: () => authRequired.set(true)
+  onMount(() => {
+    currentView.set(readViewFromUrl());
+    const unsubscribeView = currentView.subscribe((view) => {
+      if (syncingViewToUrl) return;
+      writeViewToUrl(view);
     });
-    setSyncService(syncService);
-    const auth = await request("/api/auth/status").catch(() => ({ authEnabled: false, authenticated: true }));
-    if (auth.authEnabled && !auth.authenticated) {
-      authRequired.set(true);
-      return;
+    const handlePopState = () => {
+      syncingViewToUrl = true;
+      switchView(readViewFromUrl());
+      syncingViewToUrl = false;
+    };
+    window.addEventListener("popstate", handlePopState);
+
+    async function boot(): Promise<void> {
+      syncService = createSync({
+        getState: () => get(appState),
+        setState,
+        setStatus: (status) => syncStatus.set(status),
+        onUnauthorized: () => authRequired.set(true)
+      });
+      setSyncService(syncService);
+      const auth = await request("/api/auth/status").catch(() => ({ authEnabled: false, authenticated: true }));
+      if (auth.authEnabled && !auth.authenticated) {
+        authRequired.set(true);
+        return;
+      }
+      await syncService.loadInitial();
+      registerServiceWorker();
     }
-    await syncService.loadInitial();
-    registerServiceWorker();
+    boot();
+
+    return () => {
+      unsubscribeView();
+      window.removeEventListener("popstate", handlePopState);
+    };
   });
 </script>
 
@@ -137,9 +181,9 @@
         </div>
       </div>
       <nav class="nav nav-pills app-tabs desktop-tabs" aria-label="Разделы">
-        <button class:active={$currentView === "week"} class="nav-link" type="button" on:click={() => switchView("week")}>Неделя</button>
-        <button class:active={$currentView === "activities"} class="nav-link" type="button" on:click={() => switchView("activities")}>Активности</button>
-        <button class:active={$currentView === "stats"} class="nav-link" type="button" on:click={() => switchView("stats")}>Статистика</button>
+        <button class:active={$currentView === "week"} class="nav-link" type="button" on:click={() => navigate("week")}>Неделя</button>
+        <button class:active={$currentView === "activities"} class="nav-link" type="button" on:click={() => navigate("activities")}>Активности</button>
+        <button class:active={$currentView === "stats"} class="nav-link" type="button" on:click={() => navigate("stats")}>Статистика</button>
       </nav>
       <div class="top-actions">
         <button
@@ -180,13 +224,13 @@
     </main>
 
     <nav class="mobile-nav nav nav-pills" aria-label="Разделы">
-      <button class:active={$currentView === "week"} class="nav-link" type="button" on:click={() => switchView("week")}>
+      <button class:active={$currentView === "week"} class="nav-link" type="button" on:click={() => navigate("week")}>
         <i class="bi bi-calendar-week" aria-hidden="true"></i><span>Неделя</span>
       </button>
-      <button class:active={$currentView === "activities"} class="nav-link" type="button" on:click={() => switchView("activities")}>
+      <button class:active={$currentView === "activities"} class="nav-link" type="button" on:click={() => navigate("activities")}>
         <i class="bi bi-diagram-3" aria-hidden="true"></i><span>Активности</span>
       </button>
-      <button class:active={$currentView === "stats"} class="nav-link" type="button" on:click={() => switchView("stats")}>
+      <button class:active={$currentView === "stats"} class="nav-link" type="button" on:click={() => navigate("stats")}>
         <i class="bi bi-bar-chart" aria-hidden="true"></i><span>Статистика</span>
       </button>
     </nav>

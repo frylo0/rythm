@@ -492,6 +492,33 @@ textarea {
   overflow: visible;
 }
 
+.day-column:focus {
+  outline: none;
+}
+
+.day-column.is-today {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
+  box-shadow: 0 16px 40px rgba(37, 99, 235, 0.16);
+}
+
+.day-column.is-today header {
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.16), rgba(15, 118, 110, 0.1)),
+    var(--soft);
+}
+
+.day-column.is-today header strong::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 7px;
+  border-radius: 999px;
+  background: var(--accent-2);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+  vertical-align: middle;
+}
+
 .day-column.is-extra {
   outline: 2px solid rgba(185, 28, 28, 0.22);
 }
@@ -1017,6 +1044,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.has-picker .view {
+    grid-column: auto;
+  }
+
   .activity-picker {
     display: none;
     position: static;
@@ -1024,7 +1055,7 @@ textarea {
   }
 
   .activity-picker.is-picker-visible {
-    display: block;
+    display: none;
   }
 
   .week-grid {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
   import { appState, editMode, mutateState, selectedActivityId, selectedSystem, showToast } from "../lib/stores";
   import {
@@ -24,6 +25,23 @@
   $: columns = dayColumns(state);
   $: map = activityMap(state);
   $: warnings = validateState(state);
+  $: todayIndex = currentWeekdayIndex();
+
+  function currentWeekdayIndex(): number {
+    return (new Date().getDay() + 6) % 7;
+  }
+
+  async function focusToday(): Promise<void> {
+    await tick();
+    const today = document.querySelector<HTMLElement>(".day-column.is-today");
+    if (!today) return;
+    today.focus({ preventScroll: true });
+    today.scrollIntoView({ block: "nearest", inline: "center" });
+  }
+
+  onMount(() => {
+    focusToday();
+  });
 
   function blockStyle(activity: Activity | undefined, item: ActivityTimelineItem): string {
     const px = Math.max(26, ((item.endAbsMin - item.startAbsMin) / 5) * (state.settings.pxPer5Min || 2));
@@ -143,10 +161,10 @@
     <div class="week-grid" style={`--day-count:${columns.length}`}>
       {#each columns as column}
         {@const blocks = blocksInColumn(state, column)}
-        <section class:is-extra={column.extra} class="day-column">
+        <section class:is-extra={column.extra} class:is-today={column.index === todayIndex && !column.extra} class="day-column" tabindex="-1" aria-current={column.index === todayIndex && !column.extra ? "date" : undefined}>
           <header>
             <strong>{column.label}</strong>
-            <span>{durationText(column.end - column.start)}</span>
+            <span>{column.index === todayIndex && !column.extra ? "сегодня" : durationText(column.end - column.start)}</span>
           </header>
           <div class="day-body">
             {#each columnRows(column) as row (row.id)}
