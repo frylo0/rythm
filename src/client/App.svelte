@@ -222,7 +222,7 @@
     <main class="main">
       <section class="view">
         {#if $currentView === "week"}
-          <WeekView state={$appState} onOpenItem={openItem} onOpenDraftItem={openDraftItem} onOpenDayEnd={openDayEnd} />
+          <WeekView state={$appState} onOpenItem={openItem} onOpenDraftItem={openDraftItem} onOpenDayEnd={openDayEnd} onOpenDayStart={openDayEnd} />
         {:else if $currentView === "activities"}
           <ActivitiesView state={$appState} onOpenActivity={openActivity} />
         {:else}

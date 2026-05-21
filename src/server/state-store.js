@@ -47,6 +47,13 @@ function createDefaultState() {
     const base = day * 1440;
     const weekend = day >= 5;
     timeline.push({
+      id: id("start"),
+      type: "dayStart",
+      atAbsMin: base,
+      createdAt: now,
+      updatedAt: now
+    });
+    timeline.push({
       id: id("item"),
       type: "activity",
       activityId: sleep.id,
@@ -122,7 +129,7 @@ function createDefaultState() {
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     updatedAt: now,
     settings: {
       authEnabled: Boolean(process.env.RYTHM_PASSWORD_HASH),
@@ -130,6 +137,7 @@ function createDefaultState() {
       timeStepMin: 5,
       pxPer5Min: 2,
       smartWeekGrid: true,
+      sleepActivityId: sleep.id,
       mobileWeekScale: 1,
       firstDayLabel: "Пн",
       theme: "system",

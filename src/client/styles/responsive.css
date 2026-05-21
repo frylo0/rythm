@@ -156,6 +156,10 @@
     font-size: 12px;
   }
 
+  .stats-summary {
+    grid-template-columns: 1fr;
+  }
+
   .stats-table th,
   .stats-table td {
     min-width: 82px;

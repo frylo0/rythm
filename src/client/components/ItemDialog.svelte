@@ -1,7 +1,7 @@
 <script lang="ts">
   import { activeActivities, mutateState } from "../lib/stores";
   import { activityMap, clampToStep, DAY_MIN, durationText, formatClock, now, parseClock, safeColor, uid } from "../lib/state";
-  import type { ActivityTimelineItem, DayEndTimelineItem, RythmState } from "../lib/types";
+  import type { ActivityTimelineItem, DayEndTimelineItem, DayMarkerTimelineItem, DayStartTimelineItem, RythmState } from "../lib/types";
   import Modal from "./Modal.svelte";
   import PickerTree from "./PickerTree.svelte";
 
@@ -26,10 +26,10 @@
   let initializedFor = "";
 
   $: item = itemId ? state.timeline.find((entry): entry is ActivityTimelineItem => entry.type === "activity" && entry.id === itemId) : null;
-  $: marker = markerId ? state.timeline.find((entry): entry is DayEndTimelineItem => entry.type === "dayEnd" && entry.id === markerId) : null;
+  $: marker = markerId ? state.timeline.find((entry): entry is DayMarkerTimelineItem => (entry.type === "dayEnd" || entry.type === "dayStart") && entry.id === markerId) : null;
   $: map = state ? activityMap(state) : new Map();
   $: currentActivity = item || draftItem ? map.get(activityId || item?.activityId || draftItem?.activityId || "") : null;
-  $: title = marker ? "Конец дня" : splitMode ? "Распил блока" : draftItem ? "Добавить в неделю" : "Блок недели";
+  $: title = marker ? (marker.type === "dayStart" ? "Начало дня" : "Конец дня") : splitMode ? "Распил блока" : draftItem ? "Добавить в неделю" : "Блок недели";
   $: dialogContext = open
     ? item
       ? `item:${item.id}`
@@ -123,6 +123,22 @@
       if (item) {
         const entry = draft.timeline.find((row) => row.id === item.id);
         if (!entry || entry.type !== "activity") return;
+        if (entry.systemRole === "sleep") {
+          const endMarker = draft.timeline.find((row): row is DayEndTimelineItem => row.type === "dayEnd" && row.atAbsMin === entry.startAbsMin);
+          const startMarker = draft.timeline.find((row): row is DayStartTimelineItem => row.type === "dayStart" && row.atAbsMin === entry.endAbsMin);
+          if (endMarker) {
+            endMarker.atAbsMin = Math.min(start, end - step);
+            entry.startAbsMin = endMarker.atAbsMin;
+            endMarker.updatedAt = now();
+          }
+          if (startMarker) {
+            startMarker.atAbsMin = Math.max(end, entry.startAbsMin + step);
+            entry.endAbsMin = startMarker.atAbsMin;
+            startMarker.updatedAt = now();
+          }
+          entry.updatedAt = now();
+          return;
+        }
         entry.activityId = activityId;
         entry.startAbsMin = start;
         entry.endAbsMin = end;
@@ -146,6 +162,10 @@
 
   function deleteItem() {
     if (!item) return;
+    if (item.systemRole === "sleep") {
+      error = "Сон нельзя удалить.";
+      return;
+    }
     mutateState((draft) => {
       draft.timeline = draft.timeline.filter((entry) => entry.id !== item.id);
     });
@@ -154,6 +174,10 @@
 
   function splitItem() {
     if (!item) return;
+    if (item.systemRole === "sleep") {
+      error = "Сон нельзя распилить.";
+      return;
+    }
     const total = item.endAbsMin - item.startAbsMin;
     const first = Math.min(total - 5, Math.max(5, clampToStep(splitFirst, state.settings.timeStepMin || 5)));
     mutateState((draft) => {
@@ -173,7 +197,7 @@
     if (!marker) return;
     mutateState((draft) => {
       const entry = draft.timeline.find((row) => row.id === marker.id);
-      if (!entry || entry.type !== "dayEnd") return;
+      if (!entry || (entry.type !== "dayEnd" && entry.type !== "dayStart")) return;
       const next = parseClock(markerTime, marker.atAbsMin, state);
       entry.atAbsMin = clampToStep(next, draft.settings.timeStepMin || 5);
       entry.updatedAt = now();
@@ -183,7 +207,7 @@
 
   function deleteMarker() {
     if (!marker) return;
-    if (!confirm("Удалить системный конец дня?")) return;
+    if (!confirm(`Удалить системный маркер "${marker.type === "dayStart" ? "Начало дня" : "Конец дня"}"?`)) return;
     mutateState((draft) => {
       draft.timeline = draft.timeline.filter((entry) => entry.id !== marker.id);
     });
@@ -211,7 +235,7 @@
     </div>
   {:else if item || draftItem}
     <div class="form-label">Активность</div>
-    <button class="activity-select-button" type="button" on:click={() => (pickerOpen = true)}>
+    <button class="activity-select-button" type="button" disabled={item?.systemRole === "sleep"} on:click={() => (pickerOpen = true)}>
       <span class="activity-marker" style={`--marker:${safeColor(currentActivity ? currentActivity.color : "#cbd5e1")}`}></span>
       <span>
         <strong>{currentActivity ? currentActivity.name : "Нет активности"}</strong>
@@ -238,7 +262,7 @@
     </div>
     <small class="danger-text">{error}</small>
     <div class="dialog-actions">
-      {#if item}
+      {#if item && item.systemRole !== "sleep"}
         <button type="button" class="btn btn-outline-danger" on:click={deleteItem}>Удалить</button>
         <button type="button" class="btn btn-outline-secondary" on:click={() => (splitMode = true)}>Распилить</button>
       {/if}

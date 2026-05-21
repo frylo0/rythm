@@ -1,5 +1,5 @@
 import { derived, get, writable } from "svelte/store";
-import { clone, normalizeState, touchState } from "./state";
+import { clone, normalizeState, reconcileDayModel, touchState } from "./state";
 import type { Activity, RythmState, SyncService, SystemPurchase, ViewName } from "./types";
 
 export const appState = writable<RythmState | null>(null);
@@ -26,6 +26,7 @@ export function mutateState(fn: (draft: RythmState) => void): void {
   if (!current) return;
   const draft = clone(current);
   fn(draft);
+  reconcileDayModel(draft);
   touchState(draft);
   appState.set(draft);
   syncService?.saveAndSync(draft);

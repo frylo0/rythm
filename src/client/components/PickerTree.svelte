@@ -45,6 +45,16 @@
   {#if allowSystem}
     <button
       type="button"
+      class:is-selected={selectedSystem === "dayStart"}
+      class="picker-tree-item system"
+      on:click={() => onPickSystem("dayStart")}
+    >
+      <span class="activity-marker"></span>
+      <span class="picker-tree-title">Начало дня</span>
+      <small>системный маркер</small>
+    </button>
+    <button
+      type="button"
       class:is-selected={selectedSystem === "dayEnd"}
       class="picker-tree-item system"
       on:click={() => onPickSystem("dayEnd")}

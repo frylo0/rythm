@@ -60,6 +60,7 @@
   }
 
   function remove() {
+    if (activityId === state.settings.sleepActivityId) return;
     mutateState((draft) => {
       const used = draft.timeline.some((item) => item.type === "activity" && item.activityId === activityId);
       const hasChildren = draft.activities.some((item) => item.parentId === activityId);
@@ -106,7 +107,7 @@
     Архив
   </label>
   <div class="dialog-actions">
-    {#if activity}
+    {#if activity && activity.id !== state.settings.sleepActivityId}
       <button type="button" class="btn btn-outline-danger" on:click={remove}>Удалить</button>
     {/if}
     <button type="button" class="btn btn-dark" on:click={save}>Сохранить</button>

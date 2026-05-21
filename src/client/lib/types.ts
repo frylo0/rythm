@@ -1,6 +1,7 @@
 export type ThemeMode = "system" | "light" | "dark";
 export type ViewName = "week" | "activities" | "stats";
-export type SystemPurchase = "dayEnd";
+export type SystemPurchase = "dayEnd" | "dayStart";
+export type SystemActivityRole = "sleep";
 
 export interface RythmSettings {
   authEnabled: boolean;
@@ -8,6 +9,7 @@ export interface RythmSettings {
   timeStepMin: number;
   pxPer5Min: number;
   smartWeekGrid: boolean;
+  sleepActivityId: string;
   mobileWeekScale: number;
   firstDayLabel: string;
   theme: ThemeMode;
@@ -32,6 +34,15 @@ export interface ActivityTimelineItem {
   activityId: string;
   startAbsMin: number;
   endAbsMin: number;
+  systemRole?: SystemActivityRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DayStartTimelineItem {
+  id: string;
+  type: "dayStart";
+  atAbsMin: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,7 +55,8 @@ export interface DayEndTimelineItem {
   updatedAt: string;
 }
 
-export type TimelineItem = ActivityTimelineItem | DayEndTimelineItem;
+export type DayMarkerTimelineItem = DayStartTimelineItem | DayEndTimelineItem;
+export type TimelineItem = ActivityTimelineItem | DayMarkerTimelineItem;
 
 export interface RythmState {
   schemaVersion: number;
@@ -59,6 +71,7 @@ export interface DayColumn {
   label: string;
   start: number;
   end: number;
+  startMarker: DayStartTimelineItem | null;
   marker: DayEndTimelineItem | null;
   extra: boolean;
   synthetic?: boolean;
