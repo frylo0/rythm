@@ -20,5 +20,9 @@
     "express": "^4.19.2",
     "jquery": "^3.7.1"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "svelte": "^5.19.7",
+    "vite": "^6.1.0"
+  }
 }
