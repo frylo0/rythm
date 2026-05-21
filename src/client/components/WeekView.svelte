@@ -39,8 +39,13 @@
         itemStart: number;
         itemEnd: number;
         duration: number;
+        pointerOffsetMin: number;
         columnStart: number;
         columnEnd: number;
+        target: HTMLElement;
+        scrollContainer: HTMLElement | null;
+        scrollStartTop: number;
+        windowScrollStartY: number;
       }
     | null = null;
 
@@ -87,6 +92,11 @@
 
   function isCompact(item: ActivityTimelineItem): boolean {
     return item.endAbsMin - item.startAbsMin <= 15;
+  }
+
+  function shouldShowEndTime(rows: ColumnRow[], rowIndex: number, item: ActivityTimelineItem): boolean {
+    const next = rows[rowIndex + 1];
+    return !(next?.type === "block" && next.item.startAbsMin === item.endAbsMin);
   }
 
   function itemOverlaps(item: ActivityTimelineItem): boolean {
@@ -236,27 +246,41 @@
     });
   }
 
-  function minuteFromPointer(event: PointerEvent, duration = 0): number | null {
+  function bodyPointerY(event: PointerEvent, body: HTMLElement): number {
+    const rect = body.getBoundingClientRect();
+    const paddingTop = Number.parseFloat(getComputedStyle(body).paddingTop) || 0;
+    return Math.max(0, event.clientY - rect.top - paddingTop);
+  }
+
+  function pointerMinuteInBody(event: PointerEvent, body: HTMLElement): number {
+    const start = Number(body.dataset.start);
+    const scale = (state.settings.pxPer5Min || 2) / 5;
+    return start + bodyPointerY(event, body) / scale;
+  }
+
+  function dragScrollDeltaY(): number {
+    if (!drag) return 0;
+    if (drag.scrollContainer) return drag.scrollContainer.scrollTop - drag.scrollStartTop;
+    return window.scrollY - drag.windowScrollStartY;
+  }
+
+  function minuteFromPointer(event: PointerEvent, duration = 0, pointerOffsetMin = 0): number | null {
     const body = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".day-body");
     if (!body) return null;
     const start = Number(body.dataset.start);
     const end = Number(body.dataset.end);
-    const rect = body.getBoundingClientRect();
-    const scale = (state.settings.pxPer5Min || 2) / 5;
-    const y = Math.max(0, event.clientY - rect.top - 8);
-    const raw = start + y / scale;
+    const raw = pointerMinuteInBody(event, body) - pointerOffsetMin;
     const maxStart = Math.max(start, end - duration);
     return Math.min(maxStart, Math.max(start, clampToStep(raw, state.settings.timeStepMin || 5)));
   }
 
-  function minuteFromOriginalColumn(event: PointerEvent): number | null {
+  function minuteFromOriginalColumn(event: PointerEvent, pointerOffsetMin = 0): number | null {
     if (!drag) return null;
     const body = document.querySelector<HTMLElement>(`.day-body[data-start="${drag.columnStart}"]`);
     if (!body) return null;
-    const rect = body.getBoundingClientRect();
     const scale = (state.settings.pxPer5Min || 2) / 5;
-    const y = Math.max(0, event.clientY - rect.top - 8);
-    const raw = drag.columnStart + y / scale;
+    const y = bodyPointerY(event, body);
+    const raw = drag.columnStart + y / scale - pointerOffsetMin;
     return Math.min(drag.columnEnd, Math.max(drag.columnStart, clampToStep(raw, state.settings.timeStepMin || 5)));
   }
 
@@ -264,7 +288,15 @@
     if (!$editMode || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    const body = (event.currentTarget as HTMLElement).closest<HTMLElement>(".day-body");
+    const target = event.currentTarget as HTMLElement;
+    target.setPointerCapture?.(event.pointerId);
+    const body = target.closest<HTMLElement>(".day-body");
+    const scrollContainer = target.closest<HTMLElement>(".week-scroll");
+    const pointerMin = body ? pointerMinuteInBody(event, body) : item.startAbsMin;
+    const anchorMin = mode === "end" ? item.endAbsMin : item.startAbsMin;
+    const pointerOffsetMin = body
+      ? Math.min(item.endAbsMin - item.startAbsMin, Math.max(-(item.endAbsMin - item.startAbsMin), pointerMin - anchorMin))
+      : 0;
     drag = {
       id: item.id,
       mode,
@@ -273,8 +305,13 @@
       itemStart: item.startAbsMin,
       itemEnd: item.endAbsMin,
       duration: item.endAbsMin - item.startAbsMin,
+      pointerOffsetMin,
       columnStart: body ? Number(body.dataset.start) : Math.floor(item.startAbsMin / DAY_MIN) * DAY_MIN,
-      columnEnd: body ? Number(body.dataset.end) : Math.ceil(item.endAbsMin / DAY_MIN) * DAY_MIN
+      columnEnd: body ? Number(body.dataset.end) : Math.ceil(item.endAbsMin / DAY_MIN) * DAY_MIN,
+      target,
+      scrollContainer,
+      scrollStartTop: scrollContainer?.scrollTop || 0,
+      windowScrollStartY: window.scrollY
     };
     window.addEventListener("pointermove", moveDrag);
     window.addEventListener("pointerup", endDrag);
@@ -286,15 +323,15 @@
     event.preventDefault();
     const step = state.settings.timeStepMin || 5;
     const scale = (state.settings.pxPer5Min || 2) / 5;
-    const delta = clampToStep((event.clientY - drag.pointerStartY) / scale, step);
+    const delta = clampToStep((event.clientY - drag.pointerStartY + dragScrollDeltaY()) / scale, step);
     if (drag.mode === "start") {
-      const nextStart = minuteFromOriginalColumn(event) ?? drag.itemStart + delta;
+      const nextStart = minuteFromOriginalColumn(event, drag.pointerOffsetMin) ?? drag.itemStart + delta;
       updateItem(drag.id, { startAbsMin: Math.min(nextStart, drag.itemEnd - step) });
     } else if (drag.mode === "end") {
-      const nextEnd = minuteFromOriginalColumn(event) ?? drag.itemEnd + delta;
+      const nextEnd = minuteFromOriginalColumn(event, drag.pointerOffsetMin) ?? drag.itemEnd + delta;
       updateItem(drag.id, { endAbsMin: Math.max(nextEnd, drag.itemStart + step) });
     } else {
-      const nextStart = minuteFromPointer(event, drag.duration);
+      const nextStart = minuteFromPointer(event, drag.duration, drag.pointerOffsetMin);
       if (nextStart == null) return;
       updateItem(drag.id, { startAbsMin: nextStart, endAbsMin: nextStart + drag.duration });
     }
@@ -302,6 +339,7 @@
 
   function endDrag(event: PointerEvent): void {
     if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.target.releasePointerCapture?.(event.pointerId);
     drag = null;
     suppressClickUntil = Date.now() + 250;
     window.removeEventListener("pointermove", moveDrag);
@@ -341,14 +379,14 @@
   <div class="week-scroll">
     <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${state.settings.pxPer5Min || 2}px;--mobile-week-scale:${state.settings.mobileWeekScale || 1}`}>
       {#each columns as column}
-        {@const blocks = blocksInColumn(state, column)}
+        {@const rows = columnRows(column)}
         <section class:is-extra={column.extra} class:is-today={column.index === todayIndex && !column.extra} class="day-column" tabindex="-1" aria-current={column.index === todayIndex && !column.extra ? "date" : undefined}>
           <header>
             <strong>{column.label}</strong>
             <span>{column.index === todayIndex && !column.extra ? "сегодня" : durationText(column.end - column.start)}</span>
           </header>
           <div class="day-body" data-start={column.start} data-end={column.end}>
-            {#each columnRows(column) as row (row.id)}
+            {#each rows as row, rowIndex (row.id)}
               {#if row.type === "gap"}
                 <button
                   type="button"
@@ -362,6 +400,7 @@
               {:else}
                 {@const item = row.item}
                 {@const activity = map.get(item.activityId)}
+                {@const showEndTime = shouldShowEndTime(rows, rowIndex, item)}
                 <div
                   role="button"
                   tabindex="0"
@@ -386,9 +425,11 @@
                       <input aria-label="Минуты длительности" type="number" min="0" max="55" step="5" value={(item.endAbsMin - item.startAbsMin) % 60} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, Math.floor((item.endAbsMin - item.startAbsMin) / 60), event.currentTarget.value)}>
                     </span>
                   {:else}
-                    <span class="week-block-times">
+                    <span class:has-single-time={!showEndTime} class="week-block-times">
                       <span>{formatClock(item.startAbsMin, state)}</span>
-                      <span>{formatClock(item.endAbsMin, state)}</span>
+                      {#if showEndTime}
+                        <span>{formatClock(item.endAbsMin, state)}</span>
+                      {/if}
                     </span>
                     <em class="week-block-duration">{durationText(item.endAbsMin - item.startAbsMin)}</em>
                   {/if}

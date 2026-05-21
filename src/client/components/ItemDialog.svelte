@@ -23,33 +23,32 @@
   let pickerOpen = false;
   let splitMode = false;
   let splitFirst = 5;
+  let initializedFor = "";
 
   $: item = itemId ? state.timeline.find((entry): entry is ActivityTimelineItem => entry.type === "activity" && entry.id === itemId) : null;
   $: marker = markerId ? state.timeline.find((entry): entry is DayEndTimelineItem => entry.type === "dayEnd" && entry.id === markerId) : null;
   $: map = state ? activityMap(state) : new Map();
   $: currentActivity = item || draftItem ? map.get(activityId || item?.activityId || draftItem?.activityId || "") : null;
   $: title = marker ? "Конец дня" : splitMode ? "Распил блока" : draftItem ? "Добавить в неделю" : "Блок недели";
-  $: if (open) {
-    if (item) {
-      activityId = item.activityId;
-      startValue = formatClock(item.startAbsMin, state);
-      endValue = formatClock(item.endAbsMin, state);
-      setDuration(item.endAbsMin - item.startAbsMin);
-      splitFirst = Math.floor(durationMin / 2 / 5) * 5;
-      error = "";
-    }
-    if (draftItem) {
-      activityId = draftItem.activityId;
-      startValue = formatClock(draftItem.startAbsMin, state);
-      endValue = formatClock(draftItem.endAbsMin, state);
-      setDuration(draftItem.endAbsMin - draftItem.startAbsMin);
-      splitMode = false;
-      error = "";
-    }
-    if (marker) {
-      markerTime = formatClock(marker.atAbsMin, state);
-      error = "";
-    }
+  $: dialogContext = open
+    ? item
+      ? `item:${item.id}`
+      : draftItem
+        ? `draft:${draftItem.activityId}:${draftItem.startAbsMin}:${draftItem.endAbsMin}:${draftItem.replaceItemId || ""}`
+        : marker
+          ? `marker:${marker.id}`
+          : ""
+    : "";
+
+  $: if (!open && initializedFor) {
+    initializedFor = "";
+    splitMode = false;
+    pickerOpen = false;
+  }
+
+  $: if (open && dialogContext && dialogContext !== initializedFor) {
+    initializeDialog();
+    initializedFor = dialogContext;
   }
 
   function setDuration(minutes: number): void {
@@ -60,6 +59,31 @@
 
   function durationFromParts(): number {
     return Math.max(5, Number(durationHours || 0) * 60 + Number(durationMinutes || 0));
+  }
+
+  function initializeDialog(): void {
+    if (item) {
+      activityId = item.activityId;
+      startValue = formatClock(item.startAbsMin, state);
+      endValue = formatClock(item.endAbsMin, state);
+      setDuration(item.endAbsMin - item.startAbsMin);
+      splitFirst = Math.floor(durationMin / 2 / 5) * 5;
+      error = "";
+      return;
+    }
+    if (draftItem) {
+      activityId = draftItem.activityId;
+      startValue = formatClock(draftItem.startAbsMin, state);
+      endValue = formatClock(draftItem.endAbsMin, state);
+      setDuration(draftItem.endAbsMin - draftItem.startAbsMin);
+      splitMode = false;
+      error = "";
+      return;
+    }
+    if (marker) {
+      markerTime = formatClock(marker.atAbsMin, state);
+      error = "";
+    }
   }
 
   function updateEndFromStart() {

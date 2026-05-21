@@ -87,7 +87,7 @@
 .week-block {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px 58px;
+  grid-template-columns: minmax(0, 1fr) 54px 40px;
   gap: 0;
   align-items: stretch;
   min-width: 0;
@@ -97,14 +97,26 @@
   border-radius: 8px;
   background: var(--block-bg);
   color: var(--block-text);
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.18);
   overflow: hidden;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.week-block.is-editing {
+  grid-template-columns: minmax(0, 1fr) 78px 58px;
 }
 
 .week-block:hover {
   transform: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 4px 14px rgba(15, 23, 42, 0.13);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.2),
+    0 4px 14px rgba(15, 23, 42, 0.13);
 }
 
 .week-block.has-overlap {
@@ -125,6 +137,7 @@
   font-size: 12px;
   line-height: 1.1;
   cursor: grab;
+  touch-action: none;
 }
 
 .week-block-title:active {
@@ -141,9 +154,17 @@
 .week-block-times {
   display: grid;
   grid-template-rows: 1fr 1fr;
-  min-width: 78px;
+  min-width: 54px;
   background: rgba(255, 255, 255, 0.03);
   line-height: 1;
+}
+
+.week-block.is-editing .week-block-times {
+  min-width: 78px;
+}
+
+.week-block-times.has-single-time {
+  grid-template-rows: 1fr;
 }
 
 .week-block-times span {
@@ -198,7 +219,7 @@
 .week-block-duration {
   display: grid;
   place-items: center;
-  min-width: 58px;
+  min-width: 40px;
   padding: 1px 4px;
   font-style: normal;
   font-size: 10px;
@@ -209,6 +230,7 @@
 .week-block-duration.is-editable {
   grid-template-columns: 1fr 1fr;
   gap: 0;
+  min-width: 58px;
   padding: 0;
 }
 
@@ -242,6 +264,7 @@
   height: 4px;
   background: rgba(255, 255, 255, 0.34);
   cursor: ns-resize;
+  touch-action: none;
 }
 
 .week-block.is-editing .resize-trigger-start {

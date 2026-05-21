@@ -123,6 +123,10 @@
     gap: 10px;
   }
 
+  .week-block:not(.is-editing) .week-block-title {
+    padding-inline: 6px;
+  }
+
   .week-scroll,
   .stats-scroll {
     max-height: calc(100vh - 152px);
