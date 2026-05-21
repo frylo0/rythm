@@ -23,9 +23,10 @@
   import PickerTree from "./PickerTree.svelte";
 
   const ROOT_FONT_PX = 16;
-  const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
-  const MIN_VIEW_BLOCK_HEIGHT_EM = 24 / ROOT_FONT_PX;
-  const MIN_EDIT_BLOCK_HEIGHT_EM = 40 / ROOT_FONT_PX;
+  const MIN_BASE_SLOT_PX = 2.5;
+  const MIN_GAP_HEIGHT_EM = 24 / ROOT_FONT_PX;
+  const MIN_VIEW_BLOCK_HEIGHT_EM = 30 / ROOT_FONT_PX;
+  const MIN_EDIT_BLOCK_HEIGHT_EM = 48 / ROOT_FONT_PX;
 
   export let state: RythmState;
   export let onOpenItem: (id: string) => void = () => {};
@@ -45,6 +46,7 @@
         itemEnd: number;
         duration: number;
         pointerOffsetMin: number;
+        pointerOffsetEm: number;
         columnIndex: number;
         columnStart: number;
         columnEnd: number;
@@ -88,6 +90,7 @@
     step: number;
     baseSlotEm: number;
     slotHeightsEm: number[];
+    cumulativeEm: number[];
   };
 
   type TimeRule = {
@@ -111,12 +114,12 @@
 
   function createWeekLayout(dayColumns: DayColumn[], columnRowsList: ColumnRow[][], editing: boolean): WeekLayout {
     const step = 5;
-    const baseSlotEm = Math.max(0.01, Number(state.settings.pxPer5Min || 2) / ROOT_FONT_PX);
+    const baseSlotEm = Math.max(MIN_BASE_SLOT_PX, Number(state.settings.pxPer5Min || 2)) / ROOT_FONT_PX;
     const maxSlotCount = Math.max(1, ...dayColumns.map((column) => Math.ceil(Math.max(0, column.end - column.start) / step)));
     const slotHeightsEm = Array.from({ length: maxSlotCount }, () => baseSlotEm);
 
     if (state.settings.smartWeekGrid === false) {
-      return { step, baseSlotEm, slotHeightsEm };
+      return createLayoutFromSlots(step, baseSlotEm, slotHeightsEm);
     }
 
     columnRowsList.forEach((rows, columnIndex) => {
@@ -126,26 +129,36 @@
         const from = row.type === "gap" ? row.from : row.item.startAbsMin;
         const to = row.type === "gap" ? row.to : row.item.endAbsMin;
         const range = slotRange(column, from, to, step);
-        const slotCount = Math.max(1, range.end - range.start);
-        const baseRowEm = slotCount * baseSlotEm;
-        const extraRowEm = Math.max(0, rowMinHeightEm(row, editing) - baseRowEm);
-        const minSlotEm = baseSlotEm + extraRowEm / slotCount;
+        const durationSlots = Math.max(1, (to - from) / step);
+        const minSlotEm = Math.max(baseSlotEm, rowMinHeightEm(row, editing) / durationSlots);
         for (let index = range.start; index < range.end; index += 1) {
           slotHeightsEm[index] = Math.max(slotHeightsEm[index] || baseSlotEm, minSlotEm);
         }
       });
     });
 
-    return { step, baseSlotEm, slotHeightsEm };
+    return createLayoutFromSlots(step, baseSlotEm, slotHeightsEm);
+  }
+
+  function createLayoutFromSlots(step: number, baseSlotEm: number, slotHeightsEm: number[]): WeekLayout {
+    const cumulativeEm = [0];
+    slotHeightsEm.forEach((height) => {
+      cumulativeEm.push(cumulativeEm[cumulativeEm.length - 1] + height);
+    });
+    return { step, baseSlotEm, slotHeightsEm, cumulativeEm };
+  }
+
+  function projectionEm(column: DayColumn, atAbsMin: number, layout = renderLayout): number {
+    const relative = Math.max(0, Math.min(column.end - column.start, atAbsMin - column.start));
+    const slotIndex = Math.floor(relative / layout.step);
+    const partial = (relative % layout.step) / layout.step;
+    const base = layout.cumulativeEm[slotIndex] ?? layout.cumulativeEm[layout.cumulativeEm.length - 1] ?? 0;
+    const slotHeight = layout.slotHeightsEm[slotIndex] || layout.baseSlotEm;
+    return base + partial * slotHeight;
   }
 
   function rowHeightEm(column: DayColumn, from: number, to: number, minHeightEm: number, layout = renderLayout): number {
-    const range = slotRange(column, from, to, layout.step);
-    let height = 0;
-    for (let index = range.start; index < range.end; index += 1) {
-      height += layout.slotHeightsEm[index] || layout.baseSlotEm;
-    }
-    return Math.max(minHeightEm, height);
+    return Math.max(minHeightEm, projectionEm(column, to, layout) - projectionEm(column, from, layout));
   }
 
   function rowHeightStyle(column: DayColumn, from: number, to: number, minHeightEm = MIN_GAP_HEIGHT_EM): string {
@@ -153,17 +166,7 @@
   }
 
   function offsetEm(column: DayColumn, atAbsMin: number, layout = renderLayout): number {
-    const relative = Math.max(0, Math.min(column.end - column.start, atAbsMin - column.start));
-    const fullSlots = Math.floor(relative / layout.step);
-    const partial = (relative % layout.step) / layout.step;
-    let offset = 0;
-    for (let index = 0; index < fullSlots; index += 1) {
-      offset += layout.slotHeightsEm[index] || layout.baseSlotEm;
-    }
-    if (partial > 0) {
-      offset += partial * (layout.slotHeightsEm[fullSlots] || layout.baseSlotEm);
-    }
-    return offset;
+    return projectionEm(column, atAbsMin, layout);
   }
 
   function hourRules(column: DayColumn): TimeRule[] {
@@ -350,16 +353,19 @@
     return Number.parseFloat(getComputedStyle(body).fontSize) || ROOT_FONT_PX;
   }
 
+  function pointerEmInBody(event: PointerEvent, body: HTMLElement): number {
+    return bodyPointerY(event, body) / bodyFontPx(body);
+  }
+
   function minuteFromLayout(column: DayColumn, yEm: number, layout = renderLayout): number {
     const slotCount = Math.max(1, Math.ceil(Math.max(0, column.end - column.start) / layout.step));
-    let cursor = 0;
     for (let index = 0; index < slotCount; index += 1) {
+      const cursor = layout.cumulativeEm[index] || 0;
       const slotHeight = layout.slotHeightsEm[index] || layout.baseSlotEm;
       if (yEm <= cursor + slotHeight) {
         const ratio = slotHeight > 0 ? Math.max(0, Math.min(1, (yEm - cursor) / slotHeight)) : 0;
         return column.start + (index + ratio) * layout.step;
       }
-      cursor += slotHeight;
     }
     return column.end;
   }
@@ -368,7 +374,7 @@
     const columnIndex = Number(body.dataset.columnIndex);
     const column = columns[columnIndex];
     if (!column) return Number(body.dataset.start);
-    return minuteFromLayout(column, bodyPointerY(event, body) / bodyFontPx(body), layout);
+    return minuteFromLayout(column, pointerEmInBody(event, body), layout);
   }
 
   function dragScrollDeltaY(): number {
@@ -385,6 +391,17 @@
     const raw = pointerMinuteInBody(event, body, drag?.layout || renderLayout) - pointerOffsetMin;
     const maxStart = Math.max(start, end - duration);
     return Math.min(maxStart, Math.max(start, clampToStep(raw, state.settings.timeStepMin || 5)));
+  }
+
+  function minuteFromPointerTop(event: PointerEvent, duration = 0, pointerOffsetEm = 0): number | null {
+    const body = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(".day-body");
+    if (!body) return null;
+    const columnIndex = Number(body.dataset.columnIndex);
+    const column = columns[columnIndex];
+    if (!column) return null;
+    const raw = minuteFromLayout(column, pointerEmInBody(event, body) - pointerOffsetEm, drag?.layout || renderLayout);
+    const maxStart = Math.max(column.start, column.end - duration);
+    return Math.min(maxStart, Math.max(column.start, clampToStep(raw, state.settings.timeStepMin || 5)));
   }
 
   function minuteFromOriginalColumn(event: PointerEvent, pointerOffsetMin = 0): number | null {
@@ -407,12 +424,17 @@
     const layout = {
       step: renderLayout.step,
       baseSlotEm: renderLayout.baseSlotEm,
-      slotHeightsEm: renderLayout.slotHeightsEm.slice()
+      slotHeightsEm: renderLayout.slotHeightsEm.slice(),
+      cumulativeEm: renderLayout.cumulativeEm.slice()
     };
     const pointerMin = body ? pointerMinuteInBody(event, body, layout) : item.startAbsMin;
     const anchorMin = mode === "end" ? item.endAbsMin : item.startAbsMin;
     const pointerOffsetMin = body
       ? Math.min(item.endAbsMin - item.startAbsMin, Math.max(-(item.endAbsMin - item.startAbsMin), pointerMin - anchorMin))
+      : 0;
+    const column = columns[columnIndex];
+    const pointerOffsetEm = body && column && mode === "move"
+      ? Math.max(0, pointerEmInBody(event, body) - projectionEm(column, item.startAbsMin, layout))
       : 0;
     drag = {
       id: item.id,
@@ -423,6 +445,7 @@
       itemEnd: item.endAbsMin,
       duration: item.endAbsMin - item.startAbsMin,
       pointerOffsetMin,
+      pointerOffsetEm,
       columnIndex,
       columnStart: body ? Number(body.dataset.start) : Math.floor(item.startAbsMin / DAY_MIN) * DAY_MIN,
       columnEnd: body ? Number(body.dataset.end) : Math.ceil(item.endAbsMin / DAY_MIN) * DAY_MIN,
@@ -450,7 +473,7 @@
       const nextEnd = minuteFromOriginalColumn(event, drag.pointerOffsetMin) ?? drag.itemEnd + delta;
       updateItem(drag.id, { endAbsMin: Math.max(nextEnd, drag.itemStart + step) });
     } else {
-      const nextStart = minuteFromPointer(event, drag.duration, drag.pointerOffsetMin);
+      const nextStart = minuteFromPointerTop(event, drag.duration, drag.pointerOffsetEm) ?? minuteFromPointer(event, drag.duration, drag.pointerOffsetMin);
       if (nextStart == null) return;
       updateItem(drag.id, { startAbsMin: nextStart, endAbsMin: nextStart + drag.duration });
     }
