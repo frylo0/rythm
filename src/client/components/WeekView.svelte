@@ -91,14 +91,8 @@
   function currentScenarioMinute(date: Date): number {
     const clock = date.getHours() * 60 + date.getMinutes();
     const weekStart = state.settings.weekStartClockMin || 0;
-    const column = columns.find((item) => item.index === todayIndex && !item.extra);
-    if (!column) {
-      const dayMinute = ((clock - weekStart) % DAY_MIN + DAY_MIN) % DAY_MIN;
-      return todayIndex * DAY_MIN + dayMinute;
-    }
-    const columnStartClock = ((weekStart + column.start) % DAY_MIN + DAY_MIN) % DAY_MIN;
-    const minuteFromColumnStart = ((clock - columnStartClock) % DAY_MIN + DAY_MIN) % DAY_MIN;
-    return column.start + minuteFromColumnStart;
+    const dayMinute = ((clock - weekStart) % DAY_MIN + DAY_MIN) % DAY_MIN;
+    return todayIndex * DAY_MIN + dayMinute;
   }
 
   function hasCurrentTime(column: DayColumn): boolean {
