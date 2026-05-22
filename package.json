@@ -11,6 +11,7 @@
     "dev": "NODE_ENV=development node src/server/server.js",
     "build": "node scripts/build.js",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:week-layout": "node scripts/check-week-layout.js",
     "start": "NODE_ENV=production node src/server/server.js",
     "deploy:vps": "scripts/deploy-vps.sh",
     "setup:env": "node scripts/setup-env.js",

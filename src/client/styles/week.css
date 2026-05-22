@@ -1,5 +1,6 @@
 
 .week-grid {
+  --week-unit: 1rem;
   display: grid;
   grid-template-columns: repeat(var(--day-count), 14em);
   gap: 0.75em;
@@ -65,6 +66,12 @@
   gap: 0;
   padding: 0.5em;
   background: var(--panel);
+}
+
+.day-start-offset,
+.day-end-offset {
+  min-height: 0;
+  pointer-events: none;
 }
 
 .time-rule {
@@ -292,11 +299,11 @@
 }
 
 .week-block-times span + span {
-  border-top: 2px solid rgba(0, 0, 0, 0.05);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .week-block-times input + input {
-  border-top: 2px solid rgba(0, 0, 0, 0.05);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .week-block-duration {
@@ -359,9 +366,12 @@
   border-radius: 0.5em;
   background: rgba(100, 116, 139, 0.06);
   color: var(--muted);
-  font-size: 0.6875em;
   cursor: pointer;
   opacity: 0.74;
+}
+
+.gap span {
+  font-size: 0.6875em;
 }
 
 .gap.is-editable,
@@ -387,12 +397,6 @@
   background: linear-gradient(90deg, rgba(15, 118, 110, 0.1), rgba(37, 99, 235, 0.08));
 }
 
-.outside-day-group {
-  display: grid;
-  gap: 0.25em;
-  margin: 0.25em 0;
-  padding: 0.25em;
-  border: 1px solid rgba(220, 38, 38, 0.34);
-  border-radius: 0.625em;
-  background: rgba(220, 38, 38, 0.08);
+.after-day-gap {
+  background: rgba(100, 116, 139, 0.04);
 }

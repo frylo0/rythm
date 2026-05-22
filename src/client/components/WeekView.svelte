@@ -20,6 +20,16 @@
   	validateState,
   	WEEK_MIN
   } from "../lib/state";
+  import {
+    EMPTY_WEEK_LAYOUT,
+    absMinuteFromAxis,
+    createWeekLayout as createWeekLayoutModel,
+    dayOffsetsEm,
+    describeWeekLayout,
+    minuteFromY,
+    projectAbsMinute,
+    rangeHeightEm
+  } from "../lib/weekLayout.mjs";
   import type { Activity, ActivityTimelineItem, DayColumn, DayEndTimelineItem, DayStartTimelineItem, RythmState } from "../lib/types";
 
   const ROOT_FONT_PX = 16;
@@ -36,6 +46,7 @@
   let currentDate = new Date();
   let lastTap = { id: "", at: 0 };
   let suppressClickUntil = 0;
+  let weekLayout: WeekLayout = { ...EMPTY_WEEK_LAYOUT };
   let drag:
     | {
         id: string;
@@ -60,8 +71,10 @@
 
   $: columns = dayColumns(state);
   $: rowsByColumn = columns.map((column) => columnRows(column));
-  $: weekLayout = createWeekLayout(columns, rowsByColumn, $editMode);
+  $: afterRowsByColumn = columns.map((column, columnIndex) => columnAfterRows(column, columnIndex));
+  $: if (!drag) weekLayout = createWeekLayout(columns, rowsByColumn, $editMode);
   $: renderLayout = drag?.layout || weekLayout;
+  $: if (state.settings.weekMapLogging && !drag) logWeekMap(columns, rowsByColumn, weekLayout);
   $: map = activityMap(state);
   $: warnings = validateState(state);
   $: visibleWarnings = warnings.filter((warning) =>
@@ -93,11 +106,15 @@
   }
 
   function currentTimeStyle(column: DayColumn): string {
-    return `top:${0.5 + offsetEm(column, currentAbsMin, renderLayout)}em`;
+    return `top:${weekUnit(0.5 + offsetEm(column, currentAbsMin, renderLayout))}`;
   }
 
   function isCurrentActivity(item: ActivityTimelineItem): boolean {
     return currentAbsMin >= item.startAbsMin && currentAbsMin < item.endAbsMin;
+  }
+
+  function weekUnit(value: number): string {
+    return value === 0 ? "0px" : `calc(var(--week-unit) * ${value})`;
   }
 
   async function focusToday(): Promise<void> {
@@ -130,8 +147,12 @@
   type WeekLayout = {
     step: number;
     baseSlotEm: number;
-    slotHeightsEm: number[];
+    fallbackTimeMin?: number;
+    pointsMin: number[];
+    segmentHeightsEm: number[];
     cumulativeEm: number[];
+    smart: boolean;
+    strategy: string;
   };
 
   type TimeRule = {
@@ -139,75 +160,106 @@
     topEm: number;
   };
 
-  function slotRange(column: DayColumn, from: number, to: number, step: number): { start: number; end: number } {
-    const start = Math.max(0, Math.floor((from - column.start) / step));
-    const end = Math.max(start + 1, Math.ceil((to - column.start) / step));
-    return { start, end };
-  }
+  type WeekMapPoint = {
+    label: string;
+    atAbsMin: number;
+    durationMin?: number;
+    yPx: number;
+    yEm: number;
+  };
+
+  type WeekMapDay = {
+    column: DayColumn;
+    startOffsetPx: number;
+    startOffsetEm: number;
+    endOffsetPx: number;
+    endOffsetEm: number;
+    points: WeekMapPoint[];
+  };
+
+  type WeekMapSegment = {
+    fromAxisMin: number;
+    toAxisMin: number;
+    durationMin: number;
+    yPx: number;
+    yEm: number;
+    heightPx: number;
+    heightEm: number;
+  };
 
   function blockMinHeightEm(editing: boolean): number {
     return editing ? MIN_EDIT_BLOCK_HEIGHT_EM : MIN_VIEW_BLOCK_HEIGHT_EM;
   }
 
-  function rowMinHeightEm(row: ColumnRow, editing: boolean): number {
-    return row.type === "block" ? blockMinHeightEm(editing) : MIN_GAP_HEIGHT_EM;
-  }
-
   function createWeekLayout(dayColumns: DayColumn[], columnRowsList: ColumnRow[][], editing: boolean): WeekLayout {
-    const step = 5;
-    const baseSlotEm = Math.max(0.01, Number(state.settings.pxPer5Min || 2) / ROOT_FONT_PX);
-    const maxSlotCount = Math.max(1, ...dayColumns.map((column) => Math.ceil(Math.max(0, column.end - column.start) / step)));
-    const slotHeightsEm = Array.from({ length: maxSlotCount }, () => baseSlotEm);
-
-    if (state.settings.smartWeekGrid === false) {
-      return createLayoutFromSlots(step, baseSlotEm, slotHeightsEm);
-    }
-
-    columnRowsList.forEach((rows, columnIndex) => {
-      const column = dayColumns[columnIndex];
-      if (!column) return;
-      rows.forEach((row) => {
-        const from = row.type === "gap" ? row.from : row.item.startAbsMin;
-        const to = row.type === "gap" ? row.to : row.item.endAbsMin;
-        const range = slotRange(column, from, to, step);
-        const durationSlots = Math.max(1, (to - from) / step);
-        const minSlotEm = Math.max(baseSlotEm, rowMinHeightEm(row, editing) / durationSlots);
-        for (let index = range.start; index < range.end; index += 1) {
-          slotHeightsEm[index] = Math.max(slotHeightsEm[index] || baseSlotEm, minSlotEm);
-        }
-      });
+    return createWeekLayoutModel({
+      columns: dayColumns,
+      rowsByColumn: columnRowsList,
+      step: 5,
+      baseSlotEm: Math.max(0.01, Number(state.settings.pxPer5Min || 2) / ROOT_FONT_PX),
+      minSegmentHeightEm: blockMinHeightEm(editing),
+      smart: state.settings.smartWeekGrid !== false,
+      strategy: state.settings.weekLayoutStrategy
     });
-
-    return createLayoutFromSlots(step, baseSlotEm, slotHeightsEm);
-  }
-
-  function createLayoutFromSlots(step: number, baseSlotEm: number, slotHeightsEm: number[]): WeekLayout {
-    const cumulativeEm = [0];
-    slotHeightsEm.forEach((height) => {
-      cumulativeEm.push(cumulativeEm[cumulativeEm.length - 1] + height);
-    });
-    return { step, baseSlotEm, slotHeightsEm, cumulativeEm };
   }
 
   function projectionEm(column: DayColumn, atAbsMin: number, layout = renderLayout): number {
-    const relative = Math.max(0, Math.min(column.end - column.start, atAbsMin - column.start));
-    const slotIndex = Math.floor(relative / layout.step);
-    const partial = (relative % layout.step) / layout.step;
-    const base = layout.cumulativeEm[slotIndex] ?? layout.cumulativeEm[layout.cumulativeEm.length - 1] ?? 0;
-    const slotHeight = layout.slotHeightsEm[slotIndex] || layout.baseSlotEm;
-    return base + partial * slotHeight;
+    return projectAbsMinute(column, atAbsMin, layout);
   }
 
   function rowHeightEm(column: DayColumn, from: number, to: number, minHeightEm: number, layout = renderLayout): number {
-    return Math.max(minHeightEm, projectionEm(column, to, layout) - projectionEm(column, from, layout));
+    return rangeHeightEm(column, from, to, layout, minHeightEm);
   }
 
-  function rowHeightStyle(column: DayColumn, from: number, to: number, minHeightEm = MIN_GAP_HEIGHT_EM): string {
-    return `height:${rowHeightEm(column, from, to, minHeightEm)}em;min-height:${minHeightEm}em`;
+  function rowHeightStyle(column: DayColumn, from: number, to: number, minHeightEm = MIN_GAP_HEIGHT_EM, layout = renderLayout): string {
+    const height = rowHeightEm(column, from, to, minHeightEm, layout);
+    const minHeight = layout.smart ? 0 : minHeightEm;
+    return `height:${weekUnit(height)};min-height:${weekUnit(minHeight)}`;
   }
 
   function offsetEm(column: DayColumn, atAbsMin: number, layout = renderLayout): number {
     return projectionEm(column, atAbsMin, layout);
+  }
+
+  function dayStartOffsetStyle(column: DayColumn): string {
+    return `height:${weekUnit(dayOffsetsEm(column, renderLayout).startOffset)}`;
+  }
+
+  function dayEndOffsetStyle(column: DayColumn): string {
+    return `height:${weekUnit(dayOffsetsEm(column, renderLayout).endOffset)}`;
+  }
+
+  function layoutClock(column: DayColumn, axisMin: number, layout: WeekLayout): string {
+    return formatClock(absMinuteFromAxis(column, axisMin, layout), state);
+  }
+
+  function logWeekMap(dayColumns: DayColumn[], columnRowsList: ColumnRow[][], layout: WeekLayout): void {
+    if (typeof console === "undefined") return;
+    const description = describeWeekLayout(dayColumns, columnRowsList, layout);
+    console.groupCollapsed(`[rythm] Week map: ${description.smart ? description.strategy : "uniform"}, fbt ${Math.round(description.fallbackTimeMin)}м, height ${description.heightPx.toFixed(1)}px / ${description.heightEm.toFixed(2)}em`);
+    (description.days as WeekMapDay[]).forEach((day) => {
+      const column = day.column;
+      console.groupCollapsed(`${column.label}: ${formatClock(column.start, state)} -> ${formatClock(column.end, state)}, top ${day.startOffsetPx.toFixed(1)}px / ${day.startOffsetEm.toFixed(2)}em, bottom ${day.endOffsetPx.toFixed(1)}px / ${day.endOffsetEm.toFixed(2)}em`);
+      console.table(day.points.map((point: WeekMapPoint) => ({
+        point: point.label,
+        time: formatClock(point.atAbsMin, state),
+        absMin: point.atAbsMin,
+        duration: point.durationMin == null ? "" : durationText(point.durationMin),
+        yPx: point.yPx.toFixed(1),
+        yEm: point.yEm.toFixed(2)
+      })));
+      console.groupEnd();
+    });
+    console.table((description.segments as WeekMapSegment[]).map((segment) => ({
+      from: layoutClock(dayColumns[0], segment.fromAxisMin, layout),
+      to: layoutClock(dayColumns[0], segment.toAxisMin, layout),
+      durationMin: segment.durationMin,
+      yPx: segment.yPx.toFixed(1),
+      yEm: segment.yEm.toFixed(2),
+      heightPx: segment.heightPx.toFixed(1),
+      heightEm: segment.heightEm.toFixed(2)
+    })));
+    console.groupEnd();
   }
 
   function hourRules(column: DayColumn): TimeRule[] {
@@ -227,13 +279,16 @@
     return `${rowHeightStyle(column, item.startAbsMin, item.endAbsMin, blockMinHeightEm(editing))};--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
   }
 
+  function floatingRowHeightStyle(from: number, to: number, minHeightEm = MIN_GAP_HEIGHT_EM): string {
+    const durationSlots = Math.max(1, (to - from) / renderLayout.step);
+    const height = Math.max(minHeightEm, durationSlots * renderLayout.baseSlotEm);
+    return `height:${weekUnit(height)};min-height:${weekUnit(minHeightEm)}`;
+  }
+
   function floatingBlockStyle(activity: Activity | undefined, item: ActivityTimelineItem, editing: boolean): string {
     const color = safeColor(activity ? activity.color : "#e5e7eb");
     const background = colorWithAlpha(color, activity?.opacity ?? 1);
-    const durationSlots = Math.max(1, (item.endAbsMin - item.startAbsMin) / renderLayout.step);
-    const minHeight = blockMinHeightEm(editing);
-    const height = Math.max(minHeight, durationSlots * renderLayout.baseSlotEm);
-    return `height:${height}em;min-height:${minHeight}em;--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
+    return `${floatingRowHeightStyle(item.startAbsMin, item.endAbsMin, blockMinHeightEm(editing))};--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
   }
 
   function isCompact(item: ActivityTimelineItem): boolean {
@@ -297,6 +352,22 @@
     if (column.end > cursor) {
       rows.push({ type: "gap", id: `gap-${column.index}-${cursor}`, from: cursor, to: column.end });
     }
+    return rows;
+  }
+
+  function columnAfterRows(column: DayColumn, columnIndex: number): ColumnRow[] {
+    const items = [
+      ...blocksAfterDayEnd(column, columnIndex)
+    ].sort((a, b) => a.startAbsMin - b.startAbsMin || a.endAbsMin - b.endAbsMin);
+    const rows: ColumnRow[] = [];
+    let cursor = column.end;
+    items.forEach((item) => {
+      if (item.startAbsMin > cursor) {
+        rows.push({ type: "gap", id: `after-gap-${column.index}-${cursor}`, from: cursor, to: item.startAbsMin });
+      }
+      rows.push({ type: "block", id: `after-${item.id}`, item });
+      cursor = Math.max(cursor, item.endAbsMin);
+    });
     return rows;
   }
 
@@ -465,16 +536,7 @@
   }
 
   function minuteFromLayout(column: DayColumn, yEm: number, layout = renderLayout): number {
-    const slotCount = Math.max(1, Math.ceil(Math.max(0, column.end - column.start) / layout.step));
-    for (let index = 0; index < slotCount; index += 1) {
-      const cursor = layout.cumulativeEm[index] || 0;
-      const slotHeight = layout.slotHeightsEm[index] || layout.baseSlotEm;
-      if (yEm <= cursor + slotHeight) {
-        const ratio = slotHeight > 0 ? Math.max(0, Math.min(1, (yEm - cursor) / slotHeight)) : 0;
-        return column.start + (index + ratio) * layout.step;
-      }
-    }
-    return column.end;
+    return minuteFromY(column, yEm, layout);
   }
 
   function pointerMinuteInBody(event: PointerEvent, body: HTMLElement, layout = renderLayout): number {
@@ -531,8 +593,12 @@
     const layout = {
       step: renderLayout.step,
       baseSlotEm: renderLayout.baseSlotEm,
-      slotHeightsEm: renderLayout.slotHeightsEm.slice(),
-      cumulativeEm: renderLayout.cumulativeEm.slice()
+      pointsMin: renderLayout.pointsMin.slice(),
+      segmentHeightsEm: renderLayout.segmentHeightsEm.slice(),
+      cumulativeEm: renderLayout.cumulativeEm.slice(),
+      smart: renderLayout.smart,
+      strategy: renderLayout.strategy,
+      fallbackTimeMin: renderLayout.fallbackTimeMin
     };
     const pointerMin = body ? pointerMinuteInBody(event, body, layout) : item.startAbsMin;
     const anchorMin = mode === "end" ? item.endAbsMin : item.startAbsMin;
@@ -586,6 +652,13 @@
     }
   }
 
+  function decorativeBlockStyle(activity: Activity | undefined, editing: boolean): string {
+    const color = safeColor(activity ? activity.color : "#e5e7eb");
+    const background = colorWithAlpha(color, activity?.opacity ?? 1);
+    const minHeight = blockMinHeightEm(editing);
+    return `height:${weekUnit(minHeight)};min-height:${weekUnit(minHeight)};--block-bg:${background};--block-ink:${color};--block-text:${textColor(color)}`;
+  }
+
   function endDrag(event: PointerEvent): void {
     if (!drag || drag.pointerId !== event.pointerId) return;
     drag.target.releasePointerCapture?.(event.pointerId);
@@ -606,7 +679,7 @@
     </div>
   {/if}
   <div class="week-scroll">
-    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${renderLayout.baseSlotEm}em;--mobile-week-scale:${state.settings.mobileWeekScale || 1}`}>
+    <div class="week-grid" style={`--day-count:${columns.length};--five-min-height:${weekUnit(renderLayout.baseSlotEm)};--mobile-week-scale:${state.settings.mobileWeekScale || 1}`}>
       {#each columns as column, columnIndex}
         {@const rows = rowsByColumn[columnIndex] || []}
         <section class:is-extra={column.extra} class:is-today={column.index === todayIndex && !column.extra} class="day-column" tabindex="-1" aria-current={column.index === todayIndex && !column.extra ? "date" : undefined}>
@@ -618,6 +691,7 @@
             {#if hasCurrentTime(column)}
               <span class="current-time-marker" style={currentTimeStyle(column)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
             {/if}
+            <div class="day-start-offset" style={dayStartOffsetStyle(column)} aria-hidden="true"></div>
             {#if column.startMarker}
               <button type="button" class="day-start" on:click={() => onOpenDayStart(column.startMarker!.id)}>
                 <span>{formatClock(column.startMarker.atAbsMin, state)}</span>
@@ -625,7 +699,7 @@
               </button>
             {/if}
             {#each hourRules(column) as rule (rule.id)}
-              <span class="time-rule" style={`top:${rule.topEm}em`} aria-hidden="true"></span>
+              <span class="time-rule" style={`top:${weekUnit(rule.topEm)}`} aria-hidden="true"></span>
             {/each}
             {#each rows as row, rowIndex (row.id)}
               {#if row.type === "gap"}
@@ -689,60 +763,73 @@
                 Конец дня
               </button>
             {/if}
-            {#if blocksAfterDayEnd(column, columnIndex).length}
-              <div class="outside-day-group" aria-label="Блоки за пределами дня">
-                {#each blocksAfterDayEnd(column, columnIndex) as item (item.id)}
-                  {@const activity = map.get(item.activityId)}
-                  {@const isCurrent = isCurrentActivity(item)}
-                  <div
-                    role="button"
-                    tabindex="0"
-                    class:is-editing={$editMode}
-                    class:is-compact={isCompact(item)}
-                    class:has-overlap={itemOverlaps(item)}
-                    class:is-current-activity={isCurrent}
-                    class="week-block is-outside-day"
-                    style={floatingBlockStyle(activity, item, $editMode)}
-                    on:click={() => blockClick(item.id)}
-                    on:keydown={(event) => blockKeydown(event, item.id)}
-                    on:dblclick|stopPropagation={() => onOpenItem(item.id)}
-                  >
-                    <span class="resize-trigger resize-trigger-start" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "start")}></span>
-                    <strong class="week-block-title" on:pointerdown={(event) => startDrag(event, item, "move")}>{activity ? activity.name : "Нет активности"}</strong>
-                    {#if $editMode}
-                      <span class="week-block-times is-editable">
-                        <input aria-label="Начало" type="time" step="300" value={formatClock(item.startAbsMin, state)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateStart(item, event.currentTarget.value)}>
-                        <input aria-label="Конец" type="time" step="300" value={formatClock(item.endAbsMin, state)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateEnd(item, event.currentTarget.value)}>
-                      </span>
-                      <span class="week-block-duration is-editable">
-                        <input aria-label="Часы длительности" type="number" min="0" step="1" value={Math.floor((item.endAbsMin - item.startAbsMin) / 60)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, event.currentTarget.value, (item.endAbsMin - item.startAbsMin) % 60)}>
-                        <input aria-label="Минуты длительности" type="number" min="0" max="55" step="5" value={(item.endAbsMin - item.startAbsMin) % 60} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, Math.floor((item.endAbsMin - item.startAbsMin) / 60), event.currentTarget.value)}>
-                      </span>
-                    {:else}
-                      <span class="week-block-times">
-                        <span>{formatClock(item.startAbsMin, state)}</span>
+            {#each afterRowsByColumn[columnIndex] || [] as row, rowIndex (row.id)}
+              {#if row.type === "gap"}
+                <button
+                  type="button"
+                  class:is-editable={$editMode}
+                  class="gap after-day-gap"
+                  style={floatingRowHeightStyle(row.from, row.to)}
+                  on:click={() => insertAt(row.from, row.to)}
+                >
+                  <span>{durationText(row.to - row.from)}</span>
+                </button>
+              {:else}
+                {@const item = row.item}
+                {@const activity = map.get(item.activityId)}
+                {@const isCurrent = isCurrentActivity(item)}
+                {@const showEndTime = isCurrent || shouldShowEndTime(afterRowsByColumn[columnIndex] || [], rowIndex, item)}
+                <div
+                  role="button"
+                  tabindex="0"
+                  class:is-editing={$editMode}
+                  class:is-compact={isCompact(item)}
+                  class:has-overlap={itemOverlaps(item)}
+                  class:is-outside-day={isOutsideDay(item, column)}
+                  class:system-sleep={isSleepItem(item)}
+                  class:is-current-activity={isCurrent}
+                  class="week-block"
+                  style={floatingBlockStyle(activity, item, $editMode)}
+                  on:click={() => blockClick(item.id)}
+                  on:keydown={(event) => blockKeydown(event, item.id)}
+                  on:dblclick|stopPropagation={() => onOpenItem(item.id)}
+                >
+                  <span class="resize-trigger resize-trigger-start" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "start")}></span>
+                  <strong class="week-block-title" on:pointerdown={(event) => startDrag(event, item, "move")}>{activity ? activity.name : (isSleepItem(item) ? "Сон" : "Нет активности")}</strong>
+                  {#if $editMode}
+                    <span class="week-block-times is-editable">
+                      <input aria-label="Начало" type="time" step="300" value={formatClock(item.startAbsMin, state)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateStart(item, event.currentTarget.value)}>
+                      <input aria-label="Конец" type="time" step="300" value={formatClock(item.endAbsMin, state)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateEnd(item, event.currentTarget.value)}>
+                    </span>
+                    <span class="week-block-duration is-editable">
+                      <input aria-label="Часы длительности" type="number" min="0" step="1" value={Math.floor((item.endAbsMin - item.startAbsMin) / 60)} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, event.currentTarget.value, (item.endAbsMin - item.startAbsMin) % 60)}>
+                      <input aria-label="Минуты длительности" type="number" min="0" max="55" step="5" value={(item.endAbsMin - item.startAbsMin) % 60} on:click|stopPropagation on:pointerdown|stopPropagation on:change={(event) => updateDurationParts(item, Math.floor((item.endAbsMin - item.startAbsMin) / 60), event.currentTarget.value)}>
+                    </span>
+                  {:else}
+                    <span class:has-single-time={!showEndTime} class="week-block-times">
+                      <span>{formatClock(item.startAbsMin, state)}</span>
+                      {#if showEndTime}
                         <span>{formatClock(item.endAbsMin, state)}</span>
-                      </span>
-                      <em class="week-block-duration">{durationText(item.endAbsMin - item.startAbsMin)}</em>
-                    {/if}
-                    {#if activity?.archived}<small>архив</small>{/if}
-                    <span class="resize-trigger resize-trigger-end" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "end")}></span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+                      {/if}
+                    </span>
+                    <em class="week-block-duration">{durationText(item.endAbsMin - item.startAbsMin)}</em>
+                  {/if}
+                  {#if activity?.archived}<small>архив</small>{/if}
+                  <span class="resize-trigger resize-trigger-end" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "end")}></span>
+                </div>
+              {/if}
+            {/each}
+            <div class="day-end-offset" style={dayEndOffsetStyle(column)} aria-hidden="true"></div>
             {#if sleepAfterColumn(state, column)}
               {@const sleep = sleepAfterColumn(state, column)!}
               {@const activity = map.get(sleep.activityId)}
-              {@const isCurrent = isCurrentActivity(sleep)}
               <div
                 role="button"
                 tabindex="0"
                 class:is-editing={$editMode}
                 class:is-compact={isCompact(sleep)}
-                class:is-current-activity={isCurrent}
                 class="week-block system-sleep"
-                style={blockStyle(column, activity, sleep, $editMode)}
+                style={decorativeBlockStyle(activity, $editMode)}
                 on:click={() => blockClick(sleep.id)}
                 on:keydown={(event) => blockKeydown(event, sleep.id)}
                 on:dblclick|stopPropagation={() => onOpenItem(sleep.id)}

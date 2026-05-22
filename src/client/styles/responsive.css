@@ -125,6 +125,7 @@
   }
 
   .week-grid {
+    --week-unit: calc(1rem * var(--mobile-week-scale, 1));
     font-size: calc(1rem * var(--mobile-week-scale, 1));
     min-width: calc(var(--day-count) * 13.375em + (var(--day-count) - 1) * 0.625em);
     grid-template-columns: repeat(var(--day-count), 13.375em);
