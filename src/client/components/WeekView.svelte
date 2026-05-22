@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
-  import { activeActivities, appState, editMode, mutateState, selectedActivityId, selectedSystem, showToast } from "../lib/stores";
+  import { appState, editMode, mutateState, selectedActivityId, selectedSystem, showToast } from "../lib/stores";
   import {
   	activityMap,
   	blocksInColumn,
@@ -21,8 +21,6 @@
   	WEEK_MIN
   } from "../lib/state";
   import type { Activity, ActivityTimelineItem, DayColumn, DayEndTimelineItem, DayStartTimelineItem, RythmState } from "../lib/types";
-  import Modal from "./Modal.svelte";
-  import PickerTree from "./PickerTree.svelte";
 
   const ROOT_FONT_PX = 16;
   const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
@@ -35,7 +33,7 @@
   export let onOpenDayEnd: (id: string) => void = () => {};
   export let onOpenDayStart: (id: string) => void = () => {};
 
-  let pickerOpen = false;
+  let currentDate = new Date();
   let lastTap = { id: "", at: 0 };
   let suppressClickUntil = 0;
   let drag:
@@ -70,10 +68,36 @@
     warning !== "Есть пересечения активностей." &&
     (!$editMode || warning !== "Есть активность, пересекающая системный конец дня.")
   );
-  $: todayIndex = currentWeekdayIndex();
+  $: todayIndex = currentWeekdayIndex(currentDate);
+  $: currentAbsMin = currentScenarioMinute(currentDate);
 
-  function currentWeekdayIndex(): number {
-    return (new Date().getDay() + 6) % 7;
+  function currentWeekdayIndex(date: Date): number {
+    return (date.getDay() + 6) % 7;
+  }
+
+  function currentScenarioMinute(date: Date): number {
+    const clock = date.getHours() * 60 + date.getMinutes();
+    const weekStart = state.settings.weekStartClockMin || 0;
+    const column = columns.find((item) => item.index === todayIndex && !item.extra);
+    if (!column) {
+      const dayMinute = ((clock - weekStart) % DAY_MIN + DAY_MIN) % DAY_MIN;
+      return todayIndex * DAY_MIN + dayMinute;
+    }
+    const columnStartClock = ((weekStart + column.start) % DAY_MIN + DAY_MIN) % DAY_MIN;
+    const minuteFromColumnStart = ((clock - columnStartClock) % DAY_MIN + DAY_MIN) % DAY_MIN;
+    return column.start + minuteFromColumnStart;
+  }
+
+  function hasCurrentTime(column: DayColumn): boolean {
+    return !column.extra && column.index === todayIndex && currentAbsMin >= column.start && currentAbsMin <= column.end;
+  }
+
+  function currentTimeStyle(column: DayColumn): string {
+    return `top:${0.5 + offsetEm(column, currentAbsMin, renderLayout)}em`;
+  }
+
+  function isCurrentActivity(item: ActivityTimelineItem): boolean {
+    return currentAbsMin >= item.startAbsMin && currentAbsMin < item.endAbsMin;
   }
 
   async function focusToday(): Promise<void> {
@@ -81,11 +105,26 @@
     const today = document.querySelector<HTMLElement>(".day-column.is-today");
     if (!today) return;
     today.focus({ preventScroll: true });
-    today.scrollIntoView({ block: "nearest", inline: "center" });
+    const scroll = today.closest<HTMLElement>(".week-scroll");
+    const target = today.querySelector<HTMLElement>(".current-time-marker") || today;
+    if (!scroll) {
+      target.scrollIntoView({ block: "center", inline: "center" });
+      return;
+    }
+    const scrollRect = scroll.getBoundingClientRect();
+    const todayRect = today.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const left = scroll.scrollLeft + todayRect.left - scrollRect.left - (scroll.clientWidth - todayRect.width) / 2;
+    const top = scroll.scrollTop + targetRect.top - scrollRect.top - (scroll.clientHeight - targetRect.height) / 2;
+    scroll.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: "smooth" });
   }
 
   onMount(() => {
+    const timer = window.setInterval(() => {
+      currentDate = new Date();
+    }, 60_000);
     focusToday();
+    return () => window.clearInterval(timer);
   });
 
   type WeekLayout = {
@@ -410,13 +449,6 @@
     updateDuration(item, Number(hours || 0) * 60 + Number(minutes || 0));
   }
 
-  function adjustMobileScale(delta: number): void {
-    mutateState((draft) => {
-      const current = draft.settings.mobileWeekScale || 1;
-      draft.settings.mobileWeekScale = Math.min(1.8, Math.max(0.7, Math.round((current + delta) * 100) / 100));
-    });
-  }
-
   function bodyPointerY(event: PointerEvent, body: HTMLElement): number {
     const rect = body.getBoundingClientRect();
     const styles = getComputedStyle(body);
@@ -566,26 +598,6 @@
 </script>
 
 <div class="week-screen">
-  <div class="screen-head">
-    <div>
-      <h1>Неделя</h1>
-    </div>
-    <div class="week-head-actions">
-      <span class="mobile-scale-actions">
-        <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Уменьшить неделю" aria-label="Уменьшить неделю" on:click={() => adjustMobileScale(-0.05)}>
-          <i class="bi bi-dash-lg" aria-hidden="true"></i>
-        </button>
-        <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Увеличить неделю" aria-label="Увеличить неделю" on:click={() => adjustMobileScale(0.05)}>
-          <i class="bi bi-plus-lg" aria-hidden="true"></i>
-        </button>
-      </span>
-      {#if $editMode}
-        <button class="btn btn-dark btn-sm icon-button" type="button" title="Добавить активность" aria-label="Добавить активность" on:click={() => (pickerOpen = true)}>
-          <i class="bi bi-plus-lg" aria-hidden="true"></i>
-        </button>
-      {/if}
-    </div>
-  </div>
   {#if visibleWarnings.length}
     <div class="warnings">
       {#each visibleWarnings as warning}
@@ -603,6 +615,9 @@
             <span>{column.index === todayIndex && !column.extra ? "сегодня" : durationText(column.end - column.start)}</span>
           </header>
           <div class="day-body" data-column-index={columnIndex} data-start={column.start} data-end={column.end}>
+            {#if hasCurrentTime(column)}
+              <span class="current-time-marker" style={currentTimeStyle(column)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
+            {/if}
             {#if column.startMarker}
               <button type="button" class="day-start" on:click={() => onOpenDayStart(column.startMarker!.id)}>
                 <span>{formatClock(column.startMarker.atAbsMin, state)}</span>
@@ -626,7 +641,8 @@
               {:else}
                 {@const item = row.item}
                 {@const activity = map.get(item.activityId)}
-                {@const showEndTime = shouldShowEndTime(rows, rowIndex, item)}
+                {@const isCurrent = isCurrentActivity(item)}
+                {@const showEndTime = isCurrent || shouldShowEndTime(rows, rowIndex, item)}
                 <div
                   role="button"
                   tabindex="0"
@@ -634,6 +650,7 @@
                   class:is-compact={isCompact(item)}
                   class:has-overlap={itemOverlaps(item)}
                   class:is-outside-day={isOutsideDay(item, column)}
+                  class:is-current-activity={isCurrent}
                   class="week-block"
                   style={blockStyle(column, activity, item, $editMode)}
                   on:click={() => blockClick(item.id)}
@@ -676,12 +693,14 @@
               <div class="outside-day-group" aria-label="Блоки за пределами дня">
                 {#each blocksAfterDayEnd(column, columnIndex) as item (item.id)}
                   {@const activity = map.get(item.activityId)}
+                  {@const isCurrent = isCurrentActivity(item)}
                   <div
                     role="button"
                     tabindex="0"
                     class:is-editing={$editMode}
                     class:is-compact={isCompact(item)}
                     class:has-overlap={itemOverlaps(item)}
+                    class:is-current-activity={isCurrent}
                     class="week-block is-outside-day"
                     style={floatingBlockStyle(activity, item, $editMode)}
                     on:click={() => blockClick(item.id)}
@@ -715,11 +734,13 @@
             {#if sleepAfterColumn(state, column)}
               {@const sleep = sleepAfterColumn(state, column)!}
               {@const activity = map.get(sleep.activityId)}
+              {@const isCurrent = isCurrentActivity(sleep)}
               <div
                 role="button"
                 tabindex="0"
                 class:is-editing={$editMode}
                 class:is-compact={isCompact(sleep)}
+                class:is-current-activity={isCurrent}
                 class="week-block system-sleep"
                 style={blockStyle(column, activity, sleep, $editMode)}
                 on:click={() => blockClick(sleep.id)}
@@ -753,24 +774,3 @@
     </div>
   </div>
 </div>
-
-<Modal open={pickerOpen} title="Добавить в неделю" scrollable={true} onClose={() => (pickerOpen = false)}>
-  <PickerTree
-    activities={$activeActivities}
-    selectedId={$selectedActivityId}
-    selectedSystem={$selectedSystem}
-    allowSystem={true}
-    onPick={(id) => {
-      selectedActivityId.set(id);
-      selectedSystem.set(null);
-      pickerOpen = false;
-      showToast("Выберите место на неделе.");
-    }}
-    onPickSystem={(system) => {
-      selectedActivityId.set(null);
-      selectedSystem.set(system);
-      pickerOpen = false;
-      showToast(system === "dayStart" ? "Выберите место начала дня." : "Выберите место конца дня.");
-    }}
-  />
-</Modal>

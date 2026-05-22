@@ -73,6 +73,12 @@
   gap: 8px;
 }
 
+.top-actions .week-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .icon-button,
 .small-button {
   padding: 8px 10px;
@@ -161,6 +167,10 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
   padding: 18px;
+}
+
+.app-shell.is-week .main {
+  padding: 0;
 }
 
 .activity-picker {
@@ -349,8 +359,20 @@
   color: var(--danger);
 }
 
+.week-screen {
+  min-width: 0;
+}
+
 .week-scroll,
 .stats-scroll {
   overflow-x: auto;
   padding-bottom: 10px;
+}
+
+.week-scroll {
+  box-sizing: border-box;
+  height: calc(100vh - 67px);
+  overflow: auto;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  scroll-padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
 }
