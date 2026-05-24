@@ -21,14 +21,14 @@
   	WEEK_MIN
   } from "../lib/state";
   import {
-    EMPTY_WEEK_LAYOUT,
-    absMinuteFromAxis,
-    createWeekLayout as createWeekLayoutModel,
-    dayOffsetsEm,
-    describeWeekLayout,
-    minuteFromY,
-    projectAbsMinute,
-    rangeHeightEm
+  	EMPTY_WEEK_LAYOUT,
+  	absMinuteFromAxis,
+  	createWeekLayout as createWeekLayoutModel,
+  	dayOffsetsEm,
+  	describeWeekLayout,
+  	minuteFromY,
+  	projectAbsMinute,
+  	rangeHeightEm
   } from "../lib/weekLayout.mjs";
   import type { Activity, ActivityTimelineItem, DayColumn, DayEndTimelineItem, DayStartTimelineItem, RythmState } from "../lib/types";
 
@@ -46,6 +46,7 @@
   let currentDate = new Date();
   let lastTap = { id: "", at: 0 };
   let suppressClickUntil = 0;
+  let endTimeOverrides: Record<string, boolean> = {};
   let weekLayout: WeekLayout = { ...EMPTY_WEEK_LAYOUT };
   let drag:
     | {
@@ -99,12 +100,18 @@
     return !column.extra && column.index === todayIndex && currentAbsMin >= column.start && currentAbsMin <= column.end;
   }
 
-  function currentTimeStyle(column: DayColumn): string {
-    return `top:${weekUnit(0.5 + offsetEm(column, currentAbsMin, renderLayout))}`;
+  function isCurrentRange(from: number, to: number): boolean {
+    return currentAbsMin >= from && currentAbsMin < to;
+  }
+
+  function currentTimeStyle(from: number, to: number): string {
+    const duration = Math.max(1, to - from);
+    const progress = Math.min(100, Math.max(0, ((currentAbsMin - from) / duration) * 100));
+    return `top:${progress}%`;
   }
 
   function isCurrentActivity(item: ActivityTimelineItem): boolean {
-    return currentAbsMin >= item.startAbsMin && currentAbsMin < item.endAbsMin;
+    return isCurrentRange(item.startAbsMin, item.endAbsMin);
   }
 
   function weekUnit(value: number): string {
@@ -131,11 +138,26 @@
   }
 
   onMount(() => {
-    const timer = window.setInterval(() => {
+    const syncCurrentDate = () => {
       currentDate = new Date();
+    };
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") syncCurrentDate();
     }, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncCurrentDate();
+    };
+    window.addEventListener("focus", syncCurrentDate);
+    window.addEventListener("pageshow", syncCurrentDate);
+    document.addEventListener("visibilitychange", onVisible);
+    syncCurrentDate();
     focusToday();
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", syncCurrentDate);
+      window.removeEventListener("pageshow", syncCurrentDate);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   });
 
   type WeekLayout = {
@@ -289,9 +311,23 @@
     return item.endAbsMin - item.startAbsMin <= 15;
   }
 
-  function shouldShowEndTime(rows: ColumnRow[], rowIndex: number, item: ActivityTimelineItem): boolean {
-    const next = rows[rowIndex + 1];
-    return !(next?.type === "block" && next.item.startAbsMin === item.endAbsMin);
+  function shouldShowEndTime(overrides: Record<string, boolean>, rows: ColumnRow[], rowIndex: number, item: ActivityTimelineItem, isCurrent = false): boolean {
+    const override = overrides[item.id];
+    if (override != null) return override;
+    return defaultShowEndTime(rows, rowIndex, item, isCurrent);
+  }
+
+  function defaultShowEndTime(rows: ColumnRow[], rowIndex: number, item: ActivityTimelineItem, isCurrent = false): boolean {
+    return isCurrent || !hasAttachedNextBlock(rows, rowIndex, item);
+  }
+
+  function hasAttachedNextBlock(rows: ColumnRow[], rowIndex: number, item: ActivityTimelineItem): boolean {
+    const itemIndex = rows[rowIndex]?.type === "block" && rows[rowIndex].item.id === item.id
+      ? rowIndex
+      : rows.findIndex((row) => row.type === "block" && row.item.id === item.id);
+    if (itemIndex < 0) return false;
+    const next = rows[itemIndex + 1];
+    return next?.type === "block" && next.item.startAbsMin === item.endAbsMin;
   }
 
   function itemOverlaps(item: ActivityTimelineItem): boolean {
@@ -425,7 +461,7 @@
     });
   }
 
-  function blockClick(id: string): void {
+  function blockClick(id: string, item?: ActivityTimelineItem, rows: ColumnRow[] = [], rowIndex = -1, isCurrent = false): void {
     if (Date.now() < suppressClickUntil) return;
     if ($selectedActivityId && $editMode) {
       const item = state.timeline.find((entry): entry is ActivityTimelineItem => entry.type === "activity" && entry.id === id);
@@ -449,7 +485,14 @@
       return;
     }
     const timestamp = Date.now();
-    if (lastTap.id === id && timestamp - lastTap.at < 360) {
+    const isDoubleTap = lastTap.id === id && timestamp - lastTap.at < 360;
+    if (!$editMode && item && !isDoubleTap) {
+      const nextValue = endTimeOverrides[id] == null
+        ? (hasAttachedNextBlock(rows, rowIndex, item) ? true : !defaultShowEndTime(rows, rowIndex, item, isCurrent))
+        : !endTimeOverrides[id];
+      endTimeOverrides = { ...endTimeOverrides, [id]: nextValue };
+    }
+    if (isDoubleTap) {
       onOpenItem(id);
       lastTap = { id: "", at: 0 };
       return;
@@ -682,9 +725,6 @@
             <span>{column.index === todayIndex && !column.extra ? "сегодня" : durationText(column.end - column.start)}</span>
           </header>
           <div class="day-body" data-column-index={columnIndex} data-start={column.start} data-end={column.end}>
-            {#if hasCurrentTime(column)}
-              <span class="current-time-marker" style={currentTimeStyle(column)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
-            {/if}
             <div class="day-start-offset" style={dayStartOffsetStyle(column)} aria-hidden="true"></div>
             {#if column.startMarker}
               <button type="button" class="day-start" on:click={() => onOpenDayStart(column.startMarker!.id)}>
@@ -697,20 +737,25 @@
             {/each}
             {#each rows as row, rowIndex (row.id)}
               {#if row.type === "gap"}
+                {@const isCurrent = hasCurrentTime(column) && isCurrentRange(row.from, row.to)}
                 <button
                   type="button"
                   class:is-editable={$editMode}
+                  class:is-current-gap={isCurrent}
                   class="gap"
                   style={rowHeightStyle(column, row.from, row.to)}
                   on:click={() => insertAt(row.from, row.to)}
                 >
+                  {#if isCurrent}
+                    <span class="current-time-marker" style={currentTimeStyle(row.from, row.to)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
+                  {/if}
                   <span>{durationText(row.to - row.from)}</span>
                 </button>
               {:else}
                 {@const item = row.item}
                 {@const activity = map.get(item.activityId)}
                 {@const isCurrent = isCurrentActivity(item)}
-                {@const showEndTime = isCurrent || shouldShowEndTime(rows, rowIndex, item)}
+                {@const showEndTime = shouldShowEndTime(endTimeOverrides, rows, rowIndex, item, isCurrent)}
                 <div
                   role="button"
                   tabindex="0"
@@ -721,10 +766,13 @@
                   class:is-current-activity={isCurrent}
                   class="week-block"
                   style={blockStyle(column, activity, item, $editMode)}
-                  on:click={() => blockClick(item.id)}
+                  on:click={() => blockClick(item.id, item, rows, rowIndex, isCurrent)}
                   on:keydown={(event) => blockKeydown(event, item.id)}
                   on:dblclick|stopPropagation={() => onOpenItem(item.id)}
                 >
+                  {#if isCurrent}
+                    <span class="current-time-marker" style={currentTimeStyle(item.startAbsMin, item.endAbsMin)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
+                  {/if}
                   <span class="resize-trigger resize-trigger-start" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "start")}></span>
                   <strong class="week-block-title" on:pointerdown={(event) => startDrag(event, item, "move")}>{activity ? activity.name : "Нет активности"}</strong>
                   {#if $editMode}
@@ -759,20 +807,25 @@
             {/if}
             {#each afterRowsByColumn[columnIndex] || [] as row, rowIndex (row.id)}
               {#if row.type === "gap"}
+                {@const isCurrent = hasCurrentTime(column) && isCurrentRange(row.from, row.to)}
                 <button
                   type="button"
                   class:is-editable={$editMode}
+                  class:is-current-gap={isCurrent}
                   class="gap after-day-gap"
                   style={floatingRowHeightStyle(row.from, row.to)}
                   on:click={() => insertAt(row.from, row.to)}
                 >
+                  {#if isCurrent}
+                    <span class="current-time-marker" style={currentTimeStyle(row.from, row.to)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
+                  {/if}
                   <span>{durationText(row.to - row.from)}</span>
                 </button>
               {:else}
                 {@const item = row.item}
                 {@const activity = map.get(item.activityId)}
                 {@const isCurrent = isCurrentActivity(item)}
-                {@const showEndTime = isCurrent || shouldShowEndTime(afterRowsByColumn[columnIndex] || [], rowIndex, item)}
+                {@const showEndTime = shouldShowEndTime(endTimeOverrides, afterRowsByColumn[columnIndex] || [], rowIndex, item, isCurrent)}
                 <div
                   role="button"
                   tabindex="0"
@@ -784,10 +837,13 @@
                   class:is-current-activity={isCurrent}
                   class="week-block"
                   style={floatingBlockStyle(activity, item, $editMode)}
-                  on:click={() => blockClick(item.id)}
+                  on:click={() => blockClick(item.id, item, afterRowsByColumn[columnIndex] || [], rowIndex, isCurrent)}
                   on:keydown={(event) => blockKeydown(event, item.id)}
                   on:dblclick|stopPropagation={() => onOpenItem(item.id)}
                 >
+                  {#if isCurrent}
+                    <span class="current-time-marker" style={currentTimeStyle(item.startAbsMin, item.endAbsMin)} aria-label={`Сейчас ${formatClock(currentAbsMin, state)}`}></span>
+                  {/if}
                   <span class="resize-trigger resize-trigger-start" aria-hidden="true" on:pointerdown={(event) => startDrag(event, item, "start")}></span>
                   <strong class="week-block-title" on:pointerdown={(event) => startDrag(event, item, "move")}>{activity ? activity.name : (isSleepItem(item) ? "Сон" : "Нет активности")}</strong>
                   {#if $editMode}
