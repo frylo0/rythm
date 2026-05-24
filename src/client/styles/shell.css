@@ -73,6 +73,12 @@
   gap: 8px;
 }
 
+.top-actions .week-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .icon-button,
 .small-button {
   padding: 8px 10px;
@@ -161,6 +167,25 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
   padding: 18px;
+}
+
+.app-shell.is-week .main {
+  min-height: 0;
+  padding: 0;
+}
+
+.app-shell.is-week {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app-shell.is-week .view,
+.app-shell.is-week .week-screen {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .activity-picker {
@@ -349,8 +374,20 @@
   color: var(--danger);
 }
 
+.week-screen {
+  min-width: 0;
+}
+
 .week-scroll,
 .stats-scroll {
   overflow-x: auto;
   padding-bottom: 10px;
+}
+
+.week-scroll {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  scroll-padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
 }

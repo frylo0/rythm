@@ -228,6 +228,10 @@ function normalizeTheme(value: unknown): RythmSettings["theme"] {
   return value === "light" || value === "dark" || value === "system" ? value : "system";
 }
 
+function normalizeWeekLayoutStrategy(value: unknown): RythmSettings["weekLayoutStrategy"] {
+  return value === "reference" ? "reference" : "optimized";
+}
+
 function normalizeOpacity(value: unknown): number {
   const opacity = Number(value ?? 1);
   return Number.isFinite(opacity) ? Math.min(1, Math.max(0.08, opacity)) : 1;
@@ -367,6 +371,8 @@ export function normalizeState(state: unknown): RythmState {
     timeStepMin: 5,
     pxPer5Min: 2,
     smartWeekGrid: true,
+    weekLayoutStrategy: "optimized",
+    weekMapLogging: false,
     sleepActivityId,
     mobileWeekScale: 1,
     firstDayLabel: "Пн",
@@ -376,6 +382,8 @@ export function normalizeState(state: unknown): RythmState {
     theme: normalizeTheme(rawSettings.theme),
     glowEnabled: rawSettings.glowEnabled !== false,
     smartWeekGrid: rawSettings.smartWeekGrid !== false,
+    weekLayoutStrategy: normalizeWeekLayoutStrategy(rawSettings.weekLayoutStrategy),
+    weekMapLogging: rawSettings.weekMapLogging === true,
     sleepActivityId
   });
   const normalized: RythmState = {

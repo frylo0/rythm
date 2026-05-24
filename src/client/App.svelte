@@ -4,6 +4,8 @@
   import ActivitiesView from "./components/ActivitiesView.svelte";
   import ActivityDialog from "./components/ActivityDialog.svelte";
   import ItemDialog from "./components/ItemDialog.svelte";
+  import Modal from "./components/Modal.svelte";
+  import PickerTree from "./components/PickerTree.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import StatsView from "./components/StatsView.svelte";
   import WeekView from "./components/WeekView.svelte";
@@ -14,8 +16,12 @@
     authRequired,
     currentView,
     editMode,
+    activeActivities,
     setState,
     setSyncService,
+    mutateState,
+    selectedActivityId,
+    selectedSystem,
     showToast,
     switchView,
     syncStatus,
@@ -26,6 +32,7 @@
   let loginPassword = "";
   let loginError = "";
   let settingsOpen = false;
+  let pickerOpen = false;
   let activityDialogOpen = false;
   let activityId: string | null = null;
   let itemDialogOpen = false;
@@ -58,6 +65,13 @@
 
   function navigate(view: ViewName): void {
     switchView(view);
+  }
+
+  function adjustMobileScale(delta: number): void {
+    mutateState((draft) => {
+      const current = draft.settings.mobileWeekScale || 1;
+      draft.settings.mobileWeekScale = Math.min(1.8, Math.max(0.7, Math.round((current + delta) * 100) / 100));
+    });
   }
 
   function classifySync(status: string): string {
@@ -180,7 +194,7 @@
     </form>
   </div>
 {:else if $appState}
-  <div class="app-shell">
+  <div class:is-week={$currentView === "week"} class="app-shell">
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark"></span>
@@ -195,6 +209,23 @@
         <button class:active={$currentView === "stats"} class="nav-link" type="button" on:click={() => navigate("stats")}>Статистика</button>
       </nav>
       <div class="top-actions">
+        {#if $currentView === "week"}
+          <span class="week-head-actions">
+            <span class="mobile-scale-actions">
+              <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Уменьшить неделю" aria-label="Уменьшить неделю" on:click={() => adjustMobileScale(-0.05)}>
+                <i class="bi bi-dash-lg" aria-hidden="true"></i>
+              </button>
+              <button class="btn btn-outline-secondary btn-sm icon-button" type="button" title="Увеличить неделю" aria-label="Увеличить неделю" on:click={() => adjustMobileScale(0.05)}>
+                <i class="bi bi-plus-lg" aria-hidden="true"></i>
+              </button>
+            </span>
+            {#if $editMode}
+              <button class="btn btn-dark btn-sm icon-button" type="button" title="Добавить активность" aria-label="Добавить активность" on:click={() => (pickerOpen = true)}>
+                <i class="bi bi-plus-lg" aria-hidden="true"></i>
+              </button>
+            {/if}
+          </span>
+        {/if}
         <button
           id="edit-mode"
           class:active={$editMode}
@@ -247,6 +278,26 @@
   <ActivityDialog state={$appState} open={activityDialogOpen} activityId={activityId} onClose={() => (activityDialogOpen = false)} />
   <ItemDialog state={$appState} open={itemDialogOpen} {itemId} {markerId} {draftItem} onClose={() => { itemDialogOpen = false; itemId = null; markerId = null; draftItem = null; }} />
   <SettingsDialog state={$appState} open={settingsOpen} onClose={() => (settingsOpen = false)} />
+  <Modal open={pickerOpen} title="Добавить в неделю" scrollable={true} onClose={() => (pickerOpen = false)}>
+    <PickerTree
+      activities={$activeActivities}
+      selectedId={$selectedActivityId}
+      selectedSystem={$selectedSystem}
+      allowSystem={true}
+      onPick={(id) => {
+        selectedActivityId.set(id);
+        selectedSystem.set(null);
+        pickerOpen = false;
+        showToast("Выберите место на неделе.");
+      }}
+      onPickSystem={(system) => {
+        selectedActivityId.set(null);
+        selectedSystem.set(system);
+        pickerOpen = false;
+        showToast(system === "dayStart" ? "Выберите место начала дня." : "Выберите место конца дня.");
+      }}
+    />
+  </Modal>
 {:else}
   <div class="auth-screen">
     <div class="auth-box">

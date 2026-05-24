@@ -2,6 +2,7 @@ export type ThemeMode = "system" | "light" | "dark";
 export type ViewName = "week" | "activities" | "stats";
 export type SystemPurchase = "dayEnd" | "dayStart";
 export type SystemActivityRole = "sleep";
+export type WeekLayoutStrategy = "optimized" | "reference";
 
 export interface RythmSettings {
   authEnabled: boolean;
@@ -9,6 +10,8 @@ export interface RythmSettings {
   timeStepMin: number;
   pxPer5Min: number;
   smartWeekGrid: boolean;
+  weekLayoutStrategy: WeekLayoutStrategy;
+  weekMapLogging: boolean;
   sleepActivityId: string;
   mobileWeekScale: number;
   firstDayLabel: string;
