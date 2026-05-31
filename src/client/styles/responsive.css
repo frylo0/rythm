@@ -136,10 +136,15 @@
     padding-inline: 0.375em;
   }
 
-  .week-scroll,
-  .stats-scroll {
+  .week-scroll {
     overflow: auto;
     overscroll-behavior: contain;
+  }
+
+  .stats-scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-x: contain;
   }
 
   .week-scroll {
@@ -148,10 +153,6 @@
     max-height: none;
     padding: 6px 10px calc(70px + env(safe-area-inset-bottom));
     scroll-padding: 6px 10px calc(70px + env(safe-area-inset-bottom));
-  }
-
-  .stats-scroll {
-    max-height: calc(100vh - 152px);
   }
 
   .day-column header,
@@ -171,13 +172,25 @@
     font-size: 24px;
   }
 
+  .stats-title {
+    font-size: 24px;
+  }
+
+  .stats-title-block {
+    margin-bottom: 14px;
+  }
+
+  .stats-quote {
+    padding: 9px 11px 9px 13px;
+  }
+
+  .stats-quote blockquote {
+    font-size: 13px;
+  }
+
   .stats-table {
     min-width: max(760px, calc(168px + var(--day-count, 7) * 86px));
     font-size: 12px;
-  }
-
-  .stats-summary {
-    grid-template-columns: 1fr;
   }
 
   .stats-table th,

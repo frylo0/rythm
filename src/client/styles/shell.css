@@ -378,9 +378,12 @@
   min-width: 0;
 }
 
-.week-scroll,
-.stats-scroll {
+.week-scroll {
   overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.stats-scroll {
   padding-bottom: 10px;
 }
 

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { onMount, tick } from "svelte";
   import {
     WEEK_MIN,
-    DAY_MIN,
     activityMap,
     blocksInColumn,
     childrenMap,
@@ -19,6 +19,14 @@
   type SortDir = "asc" | "desc";
   let sortKey: SortKey = "hierarchy";
   let sortDir: SortDir = "desc";
+  let statsScroll: HTMLElement;
+  let statsTable: HTMLTableElement;
+  let fixedHeaderActive = false;
+  let fixedHeaderStyle = "";
+  let fixedHeaderTableStyle = "";
+  let statsLeftShift = 0;
+  let mounted = false;
+  let updateFrame = 0;
 
   interface StatsRow {
     key: string;
@@ -134,6 +142,48 @@
     sortDir = key === "name" ? "asc" : "desc";
   }
 
+  function topbarBottom(): number {
+    return Math.max(0, document.querySelector<HTMLElement>(".topbar")?.getBoundingClientRect().bottom || 0);
+  }
+
+  function updateStatsFixedLayers(): void {
+    updateFrame = 0;
+    if (!statsScroll || !statsTable) return;
+    const scrollRect = statsScroll.getBoundingClientRect();
+    const tableRect = statsTable.getBoundingClientRect();
+    const header = statsTable.querySelector<HTMLElement>("thead");
+    const headerHeight = header?.getBoundingClientRect().height || 0;
+    const top = topbarBottom();
+    statsLeftShift = statsScroll.scrollLeft;
+    fixedHeaderActive = headerHeight > 0 && tableRect.top < top && tableRect.bottom > top + headerHeight;
+    if (!fixedHeaderActive) return;
+    const left = Math.max(0, scrollRect.left);
+    const width = Math.max(0, Math.min(scrollRect.width, window.innerWidth - left));
+    fixedHeaderStyle = `top:${top}px;left:${left}px;width:${width}px;height:${headerHeight}px`;
+    fixedHeaderTableStyle = `--day-count:${columns.length};--stats-left-shift:${statsLeftShift}px;width:${statsTable.offsetWidth}px;transform:translateX(${-statsLeftShift}px)`;
+  }
+
+  function scheduleStatsFixedUpdate(): void {
+    if (!mounted || updateFrame) return;
+    updateFrame = window.requestAnimationFrame(updateStatsFixedLayers);
+  }
+
+  onMount(() => {
+    mounted = true;
+    const updateAfterRender = () => void tick().then(scheduleStatsFixedUpdate);
+    updateAfterRender();
+    window.addEventListener("scroll", scheduleStatsFixedUpdate, { passive: true });
+    window.addEventListener("resize", scheduleStatsFixedUpdate);
+    statsScroll?.addEventListener("scroll", scheduleStatsFixedUpdate, { passive: true });
+    return () => {
+      mounted = false;
+      if (updateFrame) window.cancelAnimationFrame(updateFrame);
+      window.removeEventListener("scroll", scheduleStatsFixedUpdate);
+      window.removeEventListener("resize", scheduleStatsFixedUpdate);
+      statsScroll?.removeEventListener("scroll", scheduleStatsFixedUpdate);
+    };
+  });
+
   $: columns = dayColumns(state);
   $: rows = buildRows(columns);
   $: visibleRows = sortedRows(rows);
@@ -142,35 +192,33 @@
   $: columnDurations = columns.map((column) => column.end - column.start + (sleepAfterColumn(state, column)?.endAbsMin || 0) - (sleepAfterColumn(state, column)?.startAbsMin || 0));
   $: columnTotal = columnDurations.reduce((sum, value) => sum + value, 0);
   $: totalFree = Math.max(0, WEEK_MIN - totalBusy);
-  $: weekDelta = columnTotal - WEEK_MIN;
+  $: if (mounted) {
+    columns;
+    visibleRows;
+    sortKey;
+    sortDir;
+    void tick().then(scheduleStatsFixedUpdate);
+  }
 </script>
 
 <div class="stats-screen">
-  <div class="screen-head">
-    <div>
-      <h1>Статистика</h1>
-      <p>Занято {durationText(totalBusy)} из 168ч.</p>
-    </div>
+  <div class="stats-title-block">
+    <h1 class="stats-title">Статистика</h1>
+    <figure class="stats-quote" aria-label="Цитата из аниме Блич">
+      <blockquote>
+        Мы <span>страшимся</span> того, что нельзя узреть —
+        Мы <span>почитаем</span> то, что не видим
+      </blockquote>
+      <figcaption>Ичиго, “Блич”, 1 серия</figcaption>
+    </figure>
   </div>
-  <div class="stats-summary">
-    <div class="stats-summary-card is-busy">
-      <span>Занято</span>
-      <strong>{durationText(totalBusy)}</strong>
-      <small>{Math.round(totalBusy / WEEK_MIN * 100)}% недели</small>
-    </div>
-    <div class="stats-summary-card">
-      <span>Не распределено</span>
-      <strong>{durationText(totalFree)}</strong>
-      <small>резерв до 168ч</small>
-    </div>
-    <div class:warn={weekDelta !== 0} class="stats-summary-card">
-      <span>Баланс недели</span>
-      <strong>{durationText(weekDelta)}</strong>
-      <small>отклонение от 168ч</small>
-    </div>
-  </div>
-  <div class="stats-scroll">
-    <table class="stats-table" style={`--day-count:${columns.length}`}>
+  <div class="stats-scroll" bind:this={statsScroll}>
+    <table
+      bind:this={statsTable}
+      class:is-left-fixed={statsLeftShift > 0}
+      class="stats-table"
+      style={`--day-count:${columns.length};--stats-left-shift:${statsLeftShift}px`}
+    >
       <thead>
         <tr>
           <th><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{sortTitle(sortKey === "hierarchy" ? "hierarchy" : "name")}</button></th>
@@ -194,12 +242,31 @@
             <td><strong>{durationText(row.total)}</strong></td>
           </tr>
         {/each}
-        <tr class="service-row"><th>Занято всего</th>{#each busyByDay as min}<td>{durationText(min)}</td>{/each}<td>{durationText(totalBusy)}</td></tr>
-        <tr class="service-row"><th>Не распределено</th>{#each columnDurations as min, index}<td>{durationText(Math.max(0, min - busyByDay[index]))}</td>{/each}<td>{durationText(totalFree)}</td></tr>
-        <tr class="service-row"><th>Всего в дне</th>{#each columnDurations as min}<td>{durationText(min)}</td>{/each}<td>{durationText(columnTotal)}</td></tr>
-        <tr class="service-row"><th>Отклонение от 24 часов</th>{#each columnDurations as min}<td>{durationText(min - DAY_MIN)}</td>{/each}<td></td></tr>
-        <tr class="service-row"><th>Отклонение от 168 часов</th>{#each columns as _}<td></td>{/each}<td>{durationText(weekDelta)}</td></tr>
+      </tbody>
+      <tbody class="stats-summary-body" aria-label="Суммари">
+        <tr class="summary-row"><th>Занято всего</th>{#each busyByDay as min}<td>{durationText(min)}</td>{/each}<td>{durationText(totalBusy)}</td></tr>
+        <tr class="summary-row"><th>Не распределено</th>{#each columnDurations as min, index}<td>{durationText(Math.max(0, min - busyByDay[index]))}</td>{/each}<td>{durationText(totalFree)}</td></tr>
+        <tr class="summary-row"><th>Всего в дне</th>{#each columnDurations as min}<td>{durationText(min)}</td>{/each}<td>{durationText(columnTotal)}</td></tr>
       </tbody>
     </table>
   </div>
+  {#if fixedHeaderActive}
+    <div class="stats-fixed-header" style={fixedHeaderStyle}>
+      <table
+        class:is-left-fixed={statsLeftShift > 0}
+        class="stats-table stats-fixed-header-table"
+        style={fixedHeaderTableStyle}
+      >
+        <thead>
+          <tr>
+            <th><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{sortTitle(sortKey === "hierarchy" ? "hierarchy" : "name")}</button></th>
+            {#each columns as column, index}
+              <th class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
+            {/each}
+            <th><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{sortTitle("total")}</button></th>
+          </tr>
+        </thead>
+      </table>
+    </div>
+  {/if}
 </div>
