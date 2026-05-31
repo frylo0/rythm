@@ -78,12 +78,6 @@ async function updateIndexHtml(entry) {
 async function updateServiceWorkerVersion(clientAssets) {
   const swPath = path.join(root, "public", "sw.js");
   const templatePath = path.join(root, "public", "sw.template.js");
-  const hashSource = crypto.createHash("sha256");
-  for (const asset of clientAssets) {
-    hashSource.update(asset);
-    hashSource.update(await fs.readFile(path.join(root, "public", asset)));
-  }
-  const hash = hashSource.digest("hex").slice(0, 12);
   const shellAssets = [
     "/",
     "/index.html",
@@ -97,6 +91,13 @@ async function updateServiceWorkerVersion(clientAssets) {
     "/icons/icon-192.png",
     "/icons/icon-512.png"
   ];
+  const hashSource = crypto.createHash("sha256");
+  for (const asset of shellAssets) {
+    hashSource.update(asset);
+    if (asset === "/") continue;
+    hashSource.update(await fs.readFile(path.join(root, "public", asset)));
+  }
+  const hash = hashSource.digest("hex").slice(0, 12);
   const source = await fs.readFile(templatePath, "utf8");
   await fs.writeFile(
     swPath,

@@ -84,32 +84,46 @@
 }
 
 .current-time-marker {
+  --current-time-core: rgba(37, 99, 235, 0.5);
+  --current-time-strong: rgba(59, 130, 246, 0.5);
+  --current-time-edge: rgba(147, 197, 253, 0.22);
+  --current-time-ring: rgba(219, 234, 254, 0.42);
+  --current-time-glow: rgba(37, 99, 235, 0.3);
+  --current-time-haze: rgba(96, 165, 250, 0.16);
   position: absolute;
-  left: 0.5em;
-  right: 0.5em;
+  left: 0;
+  right: 0;
   z-index: 4;
-  height: 0;
+  height: 0.25em;
   pointer-events: none;
   transform: translateY(-50%);
-  box-shadow:
-    0 0 0.625em rgba(148, 163, 184, 0.36),
-    0 0 1.35em rgba(37, 99, 235, 0.12);
-}
-
-.current-time-marker::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.current-time-marker::after {
-  inset: -0.5em 0 auto 0.125em;
-  height: 0.25em;
   background:
-    linear-gradient(90deg, rgba(148, 163, 184, 0.22), rgba(148, 163, 184, 0.06)),
-    radial-gradient(circle at 24% 50%, rgba(37, 99, 235, 0.1), transparent 28%),
-    radial-gradient(circle at 78% 50%, rgba(15, 118, 110, 0.08), transparent 30%);
-  opacity: 0.9;
+    linear-gradient(90deg, var(--current-time-edge), var(--current-time-core) 28%, var(--current-time-strong) 50%, var(--current-time-core) 72%, var(--current-time-edge));
+  box-shadow:
+    0 0 0 1px var(--current-time-ring),
+    0 0.0625em 0.25em var(--current-time-glow),
+    0 0 0.75em var(--current-time-glow),
+    0 0 1.5em var(--current-time-haze);
+}
+
+:root[data-theme-mode="dark"] .current-time-marker {
+  --current-time-core: rgba(255, 255, 255, 0.5);
+  --current-time-strong: rgba(255, 255, 255, 0.5);
+  --current-time-edge: rgba(255, 255, 255, 0.22);
+  --current-time-ring: rgba(255, 255, 255, 0.42);
+  --current-time-glow: rgba(255, 255, 255, 0.3);
+  --current-time-haze: rgba(255, 255, 255, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-mode="light"]) .current-time-marker {
+    --current-time-core: rgba(255, 255, 255, 0.5);
+    --current-time-strong: rgba(255, 255, 255, 0.5);
+    --current-time-edge: rgba(255, 255, 255, 0.22);
+    --current-time-ring: rgba(255, 255, 255, 0.42);
+    --current-time-glow: rgba(255, 255, 255, 0.3);
+    --current-time-haze: rgba(255, 255, 255, 0.16);
+  }
 }
 
 .week-block.is-current-activity > .current-time-marker {
