@@ -340,11 +340,14 @@
 }
 
 .stats-sort-indicator {
-  display: inline-block;
-  min-width: 1.35em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  margin-left: 2px;
   color: var(--accent-2);
   font-weight: 900;
-  text-align: left;
+  line-height: 1;
 }
 
 .stats-table th,

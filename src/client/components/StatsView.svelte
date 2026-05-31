@@ -183,14 +183,14 @@
     return flattenSortedTree(rowsAsTree(source), key, dir);
   }
 
-  function sortIndicator(key: SortKey): string {
-    if (sortKey !== key) return "";
-    return sortDir === "asc" ? " · ↑" : " · ↓";
+  function sortIndicator(key: SortKey, currentKey: SortKey, currentDir: SortDir): string {
+    if (currentKey !== key) return "";
+    return currentDir === "asc" ? "↑" : "↓";
   }
 
-  function sortAria(key: SortKey): "ascending" | "descending" | "none" {
-    if (sortKey !== key) return "none";
-    return sortDir === "asc" ? "ascending" : "descending";
+  function sortAria(key: SortKey, currentKey: SortKey, currentDir: SortDir): "ascending" | "descending" | "none" {
+    if (currentKey !== key) return "none";
+    return currentDir === "asc" ? "ascending" : "descending";
   }
 
   function setSort(key: SortKey): void {
@@ -293,11 +293,11 @@
     >
       <thead>
         <tr>
-          <th aria-sort={sortAria("name")}><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность<span class="stats-sort-indicator">{sortIndicator("name")}</span></button></th>
+          <th aria-sort={sortAria("name", sortKey, sortDir)}><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{#if sortKey === "name"}<span class="stats-sort-indicator">{sortIndicator("name", sortKey, sortDir)}</span>{/if}</button></th>
           {#each columns as column, index}
-            <th aria-sort={sortAria(`day:${index}`)} class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}<span class="stats-sort-indicator">{sortIndicator(`day:${index}`)}</span></button></th>
+            <th aria-sort={sortAria(`day:${index}`, sortKey, sortDir)} class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{#if sortKey === `day:${index}`}<span class="stats-sort-indicator">{sortIndicator(`day:${index}`, sortKey, sortDir)}</span>{/if}</button></th>
           {/each}
-          <th aria-sort={sortAria("total")}><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого<span class="stats-sort-indicator">{sortIndicator("total")}</span></button></th>
+          <th aria-sort={sortAria("total", sortKey, sortDir)}><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{#if sortKey === "total"}<span class="stats-sort-indicator">{sortIndicator("total", sortKey, sortDir)}</span>{/if}</button></th>
         </tr>
       </thead>
       <tbody>
@@ -363,11 +363,11 @@
       >
         <thead>
           <tr>
-            <th aria-sort={sortAria("name")}><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность<span class="stats-sort-indicator">{sortIndicator("name")}</span></button></th>
+            <th aria-sort={sortAria("name", sortKey, sortDir)}><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{#if sortKey === "name"}<span class="stats-sort-indicator">{sortIndicator("name", sortKey, sortDir)}</span>{/if}</button></th>
             {#each columns as column, index}
-              <th aria-sort={sortAria(`day:${index}`)} class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}<span class="stats-sort-indicator">{sortIndicator(`day:${index}`)}</span></button></th>
+              <th aria-sort={sortAria(`day:${index}`, sortKey, sortDir)} class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{#if sortKey === `day:${index}`}<span class="stats-sort-indicator">{sortIndicator(`day:${index}`, sortKey, sortDir)}</span>{/if}</button></th>
             {/each}
-            <th aria-sort={sortAria("total")}><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого<span class="stats-sort-indicator">{sortIndicator("total")}</span></button></th>
+            <th aria-sort={sortAria("total", sortKey, sortDir)}><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{#if sortKey === "total"}<span class="stats-sort-indicator">{sortIndicator("total", sortKey, sortDir)}</span>{/if}</button></th>
           </tr>
         </thead>
       </table>
