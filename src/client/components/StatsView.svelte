@@ -60,8 +60,10 @@
 
   function valueToneStyle(value: number, scale: ValueScale): string {
     if (value <= 0 || scale.max <= 0) return "";
-    const range = scale.max - scale.min;
-    const k = range <= 0 ? 1 : Math.min(1, Math.max(0, (value - scale.min) / range));
+    const min = Math.log1p(scale.min);
+    const max = Math.log1p(scale.max);
+    const range = max - min;
+    const k = range <= 0 ? 1 : Math.min(1, Math.max(0, (Math.log1p(value) - min) / range));
     return `--value-k:${k}`;
   }
 
