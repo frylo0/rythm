@@ -223,7 +223,7 @@
         <tr>
           <th><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{sortTitle(sortKey === "hierarchy" ? "hierarchy" : "name")}</button></th>
           {#each columns as column, index}
-            <th class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
+            <th class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
           {/each}
           <th><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{sortTitle("total")}</button></th>
         </tr>
@@ -237,7 +237,7 @@
               <span>{row.direct ? "сам блок" : row.name}</span>
             </th>
             {#each columns as column, index}
-              <td>{row.days[index] ? durationText(row.days[index]) : "—"}</td>
+              <td class:is-empty={!row.days[index]}>{row.days[index] ? durationText(row.days[index]) : "—"}</td>
             {/each}
             <td><strong>{durationText(row.total)}</strong></td>
           </tr>
@@ -261,7 +261,7 @@
           <tr>
             <th><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{sortTitle(sortKey === "hierarchy" ? "hierarchy" : "name")}</button></th>
             {#each columns as column, index}
-              <th class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
+              <th class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
             {/each}
             <th><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{sortTitle("total")}</button></th>
           </tr>

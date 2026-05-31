@@ -51,12 +51,17 @@
 }
 
 .stats-table {
+  --stats-row-bg: var(--panel);
+  --stats-row-alt-bg: color-mix(in srgb, var(--panel) 94%, var(--text));
+  --stats-head-bg: color-mix(in srgb, var(--panel) 72%, var(--soft));
+  --stats-left-bg: var(--stats-row-bg);
+  --stats-left-alt-bg: var(--stats-row-alt-bg);
+  --stats-summary-bg: color-mix(in srgb, var(--panel) 84%, var(--soft));
+  --stats-summary-alt-bg: color-mix(in srgb, var(--panel) 78%, var(--soft));
   min-width: max(1120px, calc(280px + var(--day-count, 7) * 132px));
   border-collapse: separate;
   border-spacing: 0;
-  background:
-    linear-gradient(90deg, rgba(37, 99, 235, 0.035), transparent 34%, rgba(15, 118, 110, 0.04)),
-    var(--panel);
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 16px;
   overflow: hidden;
@@ -174,7 +179,7 @@
 .stats-table thead th {
   top: var(--sticky-top);
   z-index: 8;
-  background: color-mix(in srgb, var(--panel) 88%, var(--soft));
+  background: var(--stats-head-bg);
   box-shadow: 0 1px 0 var(--line);
 }
 
@@ -216,24 +221,57 @@
   text-align: center;
 }
 
+.stats-table td {
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9375em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "kern" 1;
+  letter-spacing: 0;
+}
+
+.stats-table td:not(:last-child) {
+  font-weight: 500;
+}
+
+.stats-table td:last-child {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.stats-table td strong {
+  font: inherit;
+}
+
+.stats-table td.is-empty {
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  font-weight: 400;
+}
+
 .stats-table tbody tr:nth-child(odd) {
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.055), rgba(15, 118, 110, 0.035));
+  --stats-left-bg: var(--stats-row-bg);
+  background: var(--stats-row-bg);
 }
 
 .stats-table tbody tr:nth-child(even) {
-  background: linear-gradient(90deg, rgba(100, 116, 139, 0.035), transparent);
+  --stats-left-bg: var(--stats-row-alt-bg);
+  background: var(--stats-row-alt-bg);
 }
 
 .stats-table .stats-summary-body tr {
-  background:
-    linear-gradient(90deg, rgba(15, 23, 42, 0.09), rgba(37, 99, 235, 0.09) 42%, rgba(15, 118, 110, 0.07)),
-    color-mix(in srgb, var(--panel) 82%, var(--soft));
+  --stats-left-bg: var(--stats-summary-bg);
+  background: var(--stats-summary-bg);
   font-weight: 650;
+}
+
+.stats-table .stats-summary-body tr:nth-child(even) {
+  --stats-left-bg: var(--stats-summary-alt-bg);
+  background: var(--stats-summary-alt-bg);
 }
 
 .stats-table .stats-summary-body tr:first-child th,
 .stats-table .stats-summary-body tr:first-child td {
-  border-top: 0.45rem solid color-mix(in srgb, var(--line) 62%, transparent);
+  border-top: 0.45rem solid color-mix(in srgb, var(--accent-2) 28%, var(--line));
 }
 
 .stats-table .stats-summary-body th,
@@ -250,7 +288,7 @@
 .stats-table td:first-child {
   position: relative;
   z-index: 5;
-  background: color-mix(in srgb, var(--panel) 88%, var(--soft));
+  background: var(--stats-left-bg);
   box-shadow: 1px 0 0 var(--line);
 }
 
@@ -265,9 +303,7 @@
 
 .stats-table .stats-summary-body th:first-child,
 .stats-table .stats-summary-body td:first-child {
-  background:
-    linear-gradient(90deg, rgba(15, 23, 42, 0.1), rgba(37, 99, 235, 0.08)),
-    color-mix(in srgb, var(--panel) 78%, var(--soft));
+  background: var(--stats-left-bg);
 }
 
 .stats-table tbody th {
@@ -293,6 +329,25 @@
 
 .warn-col {
   color: var(--danger);
+}
+
+.stats-table thead th.is-weekend {
+  color: var(--accent-2);
+}
+
+.stats-table thead th.is-weekend .stats-sort {
+  font-weight: 800;
+}
+
+.stats-table thead th.is-weekend .stats-sort::after {
+  content: "";
+  display: block;
+  width: 1.8em;
+  height: 0.1875em;
+  margin: 0.25em auto 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-2) 62%, transparent);
+  box-shadow: 0 0 0.75em color-mix(in srgb, var(--accent-2) 22%, transparent);
 }
 
 .activity-select-button {
