@@ -139,9 +139,39 @@
   }
 
   let syncService: SyncService;
+  let serviceWorkerEventsInstalled = false;
+  let serviceWorkerRegisterPromise: Promise<ServiceWorkerRegistration | void> | null = null;
+  let serviceWorkerHasController = false;
+  let serviceWorkerReloading = false;
+
+  function installServiceWorkerEvents() {
+    if (serviceWorkerEventsInstalled) return;
+    serviceWorkerEventsInstalled = true;
+    serviceWorkerHasController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!serviceWorkerHasController) {
+        serviceWorkerHasController = true;
+        return;
+      }
+      if (serviceWorkerReloading) return;
+      serviceWorkerReloading = true;
+      window.location.reload();
+    });
+  }
+
   function registerServiceWorker() {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if (!("serviceWorker" in navigator)) return;
+    installServiceWorkerEvents();
+    if (!serviceWorkerRegisterPromise) {
+      serviceWorkerRegisterPromise = navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => {
+          void registration.update();
+          return registration;
+        })
+        .catch(() => {
+          serviceWorkerRegisterPromise = null;
+        });
     }
   }
 
@@ -166,6 +196,7 @@
         onUnauthorized: () => authRequired.set(true)
       });
       setSyncService(syncService);
+      registerServiceWorker();
       const auth = await request<{ authEnabled: boolean; authenticated: boolean }>("/api/auth/status").catch(() => ({ authEnabled: false, authenticated: true }));
       if (auth.authEnabled && !auth.authenticated) {
         authRequired.set(true);

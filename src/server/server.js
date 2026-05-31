@@ -9,6 +9,7 @@ const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 const CLIENT_DIR = path.join(process.cwd(), "src", "client");
 const isDev = process.env.NODE_ENV === "development";
+const noStoreFrontendFiles = new Set(["index.html", "manifest.webmanifest", "sw.js"]);
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -67,6 +68,16 @@ app.put("/api/state", auth.requireAuth, async (req, res, next) => {
 });
 
 async function installFrontend() {
+  const setFrontendCacheHeaders = (res, filePath) => {
+    if (noStoreFrontendFiles.has(path.basename(filePath))) {
+      res.setHeader("Cache-Control", "no-store");
+      return;
+    }
+    if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  };
+
   if (!isDev) {
     app.use("/src/client", express.static(CLIENT_DIR, {
       etag: true,
@@ -77,7 +88,8 @@ async function installFrontend() {
   app.use(express.static(PUBLIC_DIR, {
     etag: true,
     index: false,
-    maxAge: isDev ? 0 : "1h"
+    maxAge: isDev ? 0 : "1h",
+    setHeaders: setFrontendCacheHeaders
   }));
 
   if (isDev) {
@@ -107,6 +119,7 @@ async function installFrontend() {
   }
 
   app.get("*", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.sendFile(path.join(PUBLIC_DIR, "index.html"));
   });
 }
