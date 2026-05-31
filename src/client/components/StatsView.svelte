@@ -276,14 +276,18 @@
                 class:is-value={!isSleepRow(row) && row.days[index] > 0}
                 style={isSleepRow(row) ? "" : valueToneStyle(row.days[index] || 0, dayValueScale)}
               >
-                {row.days[index] ? durationText(row.days[index]) : "—"}
+                {#if row.days[index]}
+                  <span class="stats-value">{durationText(row.days[index])}</span>
+                {:else}
+                  <span class="stats-empty-mark">—</span>
+                {/if}
               </td>
             {/each}
             <td
               class:is-sleep-value={isSleepRow(row) && row.total > 0}
               class:is-value={!isSleepRow(row) && row.total > 0}
               style={isSleepRow(row) ? "" : valueToneStyle(row.total, totalValueScale)}
-            ><strong>{durationText(row.total)}</strong></td>
+            ><strong><span class="stats-value">{durationText(row.total)}</span></strong></td>
           </tr>
         {/each}
       </tbody>

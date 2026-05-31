@@ -237,11 +237,14 @@
 .stats-table th,
 .stats-table td {
   min-width: 120px;
+  height: 48px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   border-right: 1px solid rgba(100, 116, 139, 0.12);
   white-space: nowrap;
   text-align: center;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
 .stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) th:first-child {
@@ -254,18 +257,32 @@
 
 .stats-table td {
   --value-k: 0;
+  --value-scale: calc(0.8 + var(--value-k) * 0.45);
   color: color-mix(in srgb, var(--text) 82%, var(--muted));
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.9375em;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "kern" 1;
   letter-spacing: 0;
 }
 
 .stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) td.is-value {
-  --value-size: calc(0.75em + var(--value-k) * 0.421875em);
   color: color-mix(in srgb, var(--text) calc(38% + var(--value-k) * 62%), transparent);
-  font-size: var(--value-size);
+}
+
+.stats-table .stats-value {
+  display: inline-block;
+  line-height: 1;
+  transform: scale(var(--value-scale));
+  transform-origin: center;
+}
+
+.stats-table .stats-empty-mark {
+  display: inline-block;
+  line-height: 1;
+  transform: scale(0.78);
+  transform-origin: center;
 }
 
 .stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) td.is-value::before {
@@ -299,7 +316,6 @@
 
 .stats-table td.is-empty {
   color: color-mix(in srgb, var(--muted) 34%, transparent);
-  font-size: 0.75em;
   font-weight: 400;
 }
 
