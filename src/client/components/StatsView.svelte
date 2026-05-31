@@ -15,10 +15,11 @@
 
   export let state: RythmState;
 
-  type SortKey = "hierarchy" | "name" | "total" | `day:${number}`;
+  type SortKey = "name" | "total" | `day:${number}`;
   type SortDir = "asc" | "desc";
-  let sortKey: SortKey = "hierarchy";
-  let sortDir: SortDir = "desc";
+  let sortKey: SortKey = "name";
+  let sortDir: SortDir = "asc";
+  let preserveHierarchy = true;
   let statsScroll: HTMLElement;
   let statsTable: HTMLTableElement;
   let fixedHeaderActive = false;
@@ -42,6 +43,11 @@
   interface ValueScale {
     min: number;
     max: number;
+  }
+
+  interface RowNode {
+    row: StatsRow;
+    children: RowNode[];
   }
 
   function addTotals(row: StatsRow, dayIndex: number, minutes: number): void {
@@ -69,6 +75,10 @@
 
   function isSleepRow(row: StatsRow): boolean {
     return row.id === state.settings.sleepActivityId;
+  }
+
+  function rowTitle(row: StatsRow): string {
+    return row.direct ? "сам блок" : row.name;
   }
 
   function ensureRow(rows: Map<string, StatsRow>, activity: Activity, level: number, label?: string, direct = false): StatsRow {
@@ -138,29 +148,52 @@
     return (tree.get("root") || []).flatMap((activity) => collect(activity, 1));
   }
 
-  function sortedRows(source: StatsRow[]): StatsRow[] {
-    if (sortKey === "hierarchy") return source;
-    const direction = sortDir === "asc" ? 1 : -1;
-    return source.slice().sort((a, b) => {
-      if (sortKey === "name") return direction * a.name.localeCompare(b.name, "ru");
-      if (sortKey === "total") return direction * (a.total - b.total || a.name.localeCompare(b.name, "ru"));
-      const dayIndex = Number(sortKey.split(":")[1]);
-      return direction * ((a.days[dayIndex] || 0) - (b.days[dayIndex] || 0) || a.name.localeCompare(b.name, "ru"));
-    });
+  function compareRows(a: StatsRow, b: StatsRow, key: SortKey, dir: SortDir): number {
+    const direction = dir === "asc" ? 1 : -1;
+    const byName = rowTitle(a).localeCompare(rowTitle(b), "ru", { numeric: true, sensitivity: "base" });
+    if (key === "name") return direction * byName || b.total - a.total;
+    if (key === "total") return direction * (a.total - b.total) || byName;
+    const dayIndex = Number(key.split(":")[1]);
+    return direction * ((a.days[dayIndex] || 0) - (b.days[dayIndex] || 0)) || byName;
   }
 
-  function sortTitle(key: SortKey): string {
+  function rowsAsTree(source: StatsRow[]): RowNode[] {
+    const roots: RowNode[] = [];
+    const stack: RowNode[] = [];
+    source.forEach((row) => {
+      const node = { row, children: [] };
+      while (stack.length && stack[stack.length - 1].row.level >= row.level) stack.pop();
+      const parent = stack[stack.length - 1];
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+      stack.push(node);
+    });
+    return roots;
+  }
+
+  function flattenSortedTree(nodes: RowNode[], key: SortKey, dir: SortDir): StatsRow[] {
+    return nodes
+      .slice()
+      .sort((a, b) => compareRows(a.row, b.row, key, dir))
+      .flatMap((node) => [node.row, ...flattenSortedTree(node.children, key, dir)]);
+  }
+
+  function sortedRows(source: StatsRow[], key: SortKey, dir: SortDir, keepHierarchy: boolean): StatsRow[] {
+    if (!keepHierarchy) return source.slice().sort((a, b) => compareRows(a, b, key, dir));
+    return flattenSortedTree(rowsAsTree(source), key, dir);
+  }
+
+  function sortIndicator(key: SortKey): string {
     if (sortKey !== key) return "";
-    if (key === "hierarchy") return " · иерархия";
     return sortDir === "asc" ? " · ↑" : " · ↓";
   }
 
+  function sortAria(key: SortKey): "ascending" | "descending" | "none" {
+    if (sortKey !== key) return "none";
+    return sortDir === "asc" ? "ascending" : "descending";
+  }
+
   function setSort(key: SortKey): void {
-    if (key === "name" && sortKey === "name" && sortDir === "asc") {
-      sortKey = "hierarchy";
-      sortDir = "desc";
-      return;
-    }
     if (sortKey === key) {
       sortDir = sortDir === "asc" ? "desc" : "asc";
       return;
@@ -213,8 +246,7 @@
 
   $: columns = dayColumns(state);
   $: rows = buildRows(columns);
-  $: visibleRows = sortedRows(rows);
-  $: activityRows = visibleRows.filter((row) => !isSleepRow(row));
+  $: activityRows = sortedRows(rows.filter((row) => !isSleepRow(row)), sortKey, sortDir, preserveHierarchy);
   $: sleepRows = rows.filter((row) => isSleepRow(row));
   $: valueRows = rows.filter((row) => !isSleepRow(row));
   $: dayValueScale = createScale(valueRows.flatMap((row) => row.days.filter((value) => value > 0)));
@@ -226,16 +258,24 @@
   $: totalFree = Math.max(0, WEEK_MIN - totalBusy);
   $: if (mounted) {
     columns;
-    visibleRows;
+    activityRows;
     sortKey;
     sortDir;
+    preserveHierarchy;
     void tick().then(scheduleStatsFixedUpdate);
   }
 </script>
 
 <div class="stats-screen">
   <div class="stats-title-block">
-    <h1 class="stats-title">Статистика</h1>
+    <div class="stats-title-row">
+      <h1 class="stats-title">Статистика</h1>
+      <label class="stats-hierarchy-toggle">
+        <input type="checkbox" bind:checked={preserveHierarchy}>
+        <span class="stats-toggle-track" aria-hidden="true"><span></span></span>
+        <span>сохранять иерархию</span>
+      </label>
+    </div>
     <figure class="stats-quote" aria-label="Цитата из аниме Блич">
       <blockquote>
         Мы <span>страшимся</span> того, что нельзя узреть —
@@ -253,11 +293,11 @@
     >
       <thead>
         <tr>
-          <th><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{sortTitle(sortKey === "hierarchy" ? "hierarchy" : "name")}</button></th>
+          <th aria-sort={sortAria("name")}><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность<span class="stats-sort-indicator">{sortIndicator("name")}</span></button></th>
           {#each columns as column, index}
-            <th class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
+            <th aria-sort={sortAria(`day:${index}`)} class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}<span class="stats-sort-indicator">{sortIndicator(`day:${index}`)}</span></button></th>
           {/each}
-          <th><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{sortTitle("total")}</button></th>
+          <th aria-sort={sortAria("total")}><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого<span class="stats-sort-indicator">{sortIndicator("total")}</span></button></th>
         </tr>
       </thead>
       <tbody>
@@ -266,7 +306,7 @@
             <th style={`--marker:${safeColor(row.color)};--level:${row.level}`}>
               <span class="activity-marker"></span>
               {#if row.direct}<i class="bi bi-arrow-return-right direct-icon" aria-label="Использовано напрямую"></i>{/if}
-              <span>{row.direct ? "сам блок" : row.name}</span>
+              <span>{rowTitle(row)}</span>
             </th>
             {#each columns as column, index}
               <td
@@ -323,11 +363,11 @@
       >
         <thead>
           <tr>
-            <th><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность{sortTitle(sortKey === "hierarchy" ? "hierarchy" : "name")}</button></th>
+            <th aria-sort={sortAria("name")}><button class="stats-sort" type="button" on:click={() => setSort("name")}>Активность<span class="stats-sort-indicator">{sortIndicator("name")}</span></button></th>
             {#each columns as column, index}
-              <th class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}{sortTitle(`day:${index}`)}</button></th>
+              <th aria-sort={sortAria(`day:${index}`)} class:is-weekend={column.index === 5 || column.index === 6} class:warn-col={column.extra}><button class="stats-sort" type="button" on:click={() => setSort(`day:${index}`)}>{column.label}<span class="stats-sort-indicator">{sortIndicator(`day:${index}`)}</span></button></th>
             {/each}
-            <th><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого{sortTitle("total")}</button></th>
+            <th aria-sort={sortAria("total")}><button class="stats-sort" type="button" on:click={() => setSort("total")}>Итого<span class="stats-sort-indicator">{sortIndicator("total")}</span></button></th>
           </tr>
         </thead>
       </table>
