@@ -50,6 +50,10 @@
   color: var(--muted);
 }
 
+.stats-screen {
+  --stats-content-width: max(1120px, calc(412px + var(--day-count, 7) * 132px));
+}
+
 .stats-table {
   --stats-row-bg: var(--panel);
   --stats-row-alt-bg: color-mix(in srgb, var(--panel) 94%, var(--text));
@@ -62,7 +66,7 @@
   --stats-total-bg: color-mix(in srgb, var(--panel) 90%, var(--accent-2));
   --stats-total-alt-bg: color-mix(in srgb, var(--panel) 86%, var(--accent-2));
   --stats-weekend-bg: color-mix(in srgb, var(--panel) 96%, var(--accent-2));
-  min-width: max(1120px, calc(280px + var(--day-count, 7) * 132px));
+  min-width: var(--stats-content-width, max(1120px, calc(280px + var(--day-count, 7) * 132px)));
   border-collapse: separate;
   border-spacing: 0;
   background: var(--panel);
@@ -74,6 +78,13 @@
   overflow-x: auto;
   overflow-y: visible;
   overscroll-behavior-x: contain;
+}
+
+@media (min-width: 861px) {
+  .stats-screen {
+    width: min(100%, var(--stats-content-width));
+    margin-inline: auto;
+  }
 }
 
 .stats-title-block {
@@ -165,7 +176,9 @@
 
 .stats-quote {
   position: relative;
-  max-width: 760px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
   margin: 3px 0 0;
   padding: 10px 14px 10px 16px;
   border-left: 3px solid rgba(37, 99, 235, 0.5);

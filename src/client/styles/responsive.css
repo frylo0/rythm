@@ -189,7 +189,7 @@
   }
 
   .stats-table {
-    min-width: max(760px, calc(168px + var(--day-count, 7) * 86px));
+    min-width: max(760px, calc(254px + var(--day-count, 7) * 86px));
     font-size: 12px;
   }
 

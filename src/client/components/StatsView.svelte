@@ -266,7 +266,7 @@
   }
 </script>
 
-<div class="stats-screen">
+<div class="stats-screen" style={`--day-count:${columns.length}`}>
   <div class="stats-title-block">
     <div class="stats-title-row">
       <h1 class="stats-title">Статистика</h1>
@@ -289,7 +289,7 @@
       bind:this={statsTable}
       class:is-left-fixed={statsLeftShift > 0}
       class="stats-table"
-      style={`--day-count:${columns.length};--stats-left-shift:${statsLeftShift}px`}
+      style={`--stats-left-shift:${statsLeftShift}px`}
     >
       <thead>
         <tr>
