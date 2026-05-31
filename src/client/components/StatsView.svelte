@@ -237,16 +237,16 @@
               <span>{row.direct ? "сам блок" : row.name}</span>
             </th>
             {#each columns as column, index}
-              <td class:is-empty={!row.days[index]}>{row.days[index] ? durationText(row.days[index]) : "—"}</td>
+              <td class:is-weekend={column.index === 5 || column.index === 6} class:is-empty={!row.days[index]}>{row.days[index] ? durationText(row.days[index]) : "—"}</td>
             {/each}
             <td><strong>{durationText(row.total)}</strong></td>
           </tr>
         {/each}
       </tbody>
       <tbody class="stats-summary-body" aria-label="Суммари">
-        <tr class="summary-row"><th>Занято всего</th>{#each busyByDay as min}<td>{durationText(min)}</td>{/each}<td>{durationText(totalBusy)}</td></tr>
-        <tr class="summary-row"><th>Не распределено</th>{#each columnDurations as min, index}<td>{durationText(Math.max(0, min - busyByDay[index]))}</td>{/each}<td>{durationText(totalFree)}</td></tr>
-        <tr class="summary-row"><th>Всего в дне</th>{#each columnDurations as min}<td>{durationText(min)}</td>{/each}<td>{durationText(columnTotal)}</td></tr>
+        <tr class="summary-row"><th>Занято всего</th>{#each busyByDay as min, index}<td class:is-weekend={columns[index]?.index === 5 || columns[index]?.index === 6}>{durationText(min)}</td>{/each}<td>{durationText(totalBusy)}</td></tr>
+        <tr class="summary-row is-free-row"><th>Не распределено</th>{#each columnDurations as min, index}<td class:is-weekend={columns[index]?.index === 5 || columns[index]?.index === 6}>{durationText(Math.max(0, min - busyByDay[index]))}</td>{/each}<td>{durationText(totalFree)}</td></tr>
+        <tr class="summary-row"><th>Всего в дне</th>{#each columnDurations as min, index}<td class:is-weekend={columns[index]?.index === 5 || columns[index]?.index === 6}>{durationText(min)}</td>{/each}<td>{durationText(columnTotal)}</td></tr>
       </tbody>
     </table>
   </div>

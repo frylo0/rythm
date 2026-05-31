@@ -56,8 +56,12 @@
   --stats-head-bg: color-mix(in srgb, var(--panel) 72%, var(--soft));
   --stats-left-bg: var(--stats-row-bg);
   --stats-left-alt-bg: var(--stats-row-alt-bg);
-  --stats-summary-bg: color-mix(in srgb, var(--panel) 84%, var(--soft));
-  --stats-summary-alt-bg: color-mix(in srgb, var(--panel) 78%, var(--soft));
+  --stats-summary-bg: var(--stats-row-bg);
+  --stats-summary-alt-bg: var(--stats-row-alt-bg);
+  --stats-free-bg: color-mix(in srgb, var(--panel) 91%, var(--accent-2));
+  --stats-total-bg: color-mix(in srgb, var(--panel) 90%, var(--accent-2));
+  --stats-total-alt-bg: color-mix(in srgb, var(--panel) 86%, var(--accent-2));
+  --stats-weekend-bg: color-mix(in srgb, var(--panel) 96%, var(--accent-2));
   min-width: max(1120px, calc(280px + var(--day-count, 7) * 132px));
   border-collapse: separate;
   border-spacing: 0;
@@ -179,6 +183,10 @@
 .stats-table thead th {
   top: var(--sticky-top);
   z-index: 8;
+  color: color-mix(in srgb, var(--text) 74%, var(--muted));
+  font-size: 0.9375em;
+  letter-spacing: 0.012em;
+  text-transform: uppercase;
   background: var(--stats-head-bg);
   box-shadow: 0 1px 0 var(--line);
 }
@@ -207,7 +215,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  font-weight: 700;
+  font-weight: 800;
   text-align: inherit;
 }
 
@@ -236,7 +244,8 @@
 
 .stats-table td:last-child {
   color: var(--text);
-  font-weight: 700;
+  background: var(--stats-total-bg);
+  font-weight: 600;
 }
 
 .stats-table td strong {
@@ -249,13 +258,25 @@
 }
 
 .stats-table tbody tr:nth-child(odd) {
-  --stats-left-bg: var(--stats-row-bg);
+  --stats-left-bg: color-mix(in srgb, var(--stats-row-bg) 94%, var(--accent-2));
   background: var(--stats-row-bg);
 }
 
 .stats-table tbody tr:nth-child(even) {
-  --stats-left-bg: var(--stats-row-alt-bg);
+  --stats-left-bg: color-mix(in srgb, var(--stats-row-alt-bg) 94%, var(--accent-2));
   background: var(--stats-row-alt-bg);
+}
+
+.stats-table tbody tr:nth-child(even) td:last-child {
+  background: var(--stats-total-alt-bg);
+}
+
+.stats-table td.is-weekend {
+  background: var(--stats-weekend-bg);
+}
+
+.stats-table tbody tr:nth-child(even) td.is-weekend {
+  background: color-mix(in srgb, var(--stats-weekend-bg) 96%, var(--text));
 }
 
 .stats-table .stats-summary-body tr {
@@ -269,9 +290,15 @@
   background: var(--stats-summary-alt-bg);
 }
 
+.stats-table .stats-summary-body tr.is-free-row {
+  --stats-left-bg: var(--stats-free-bg);
+  background: var(--stats-free-bg);
+}
+
 .stats-table .stats-summary-body tr:first-child th,
 .stats-table .stats-summary-body tr:first-child td {
-  border-top: 0.45rem solid color-mix(in srgb, var(--accent-2) 28%, var(--line));
+  border-top: 0.25rem solid transparent;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-2) 18%, var(--line));
 }
 
 .stats-table .stats-summary-body th,
@@ -299,6 +326,37 @@
 
 .stats-table thead th:first-child {
   z-index: 10;
+  color: color-mix(in srgb, var(--accent-2) 56%, var(--text));
+  background: color-mix(in srgb, var(--stats-head-bg) 86%, var(--accent-2));
+}
+
+.stats-table thead th:last-child {
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--stats-head-bg) 82%, var(--accent-2));
+}
+
+.stats-table .stats-summary-body td:last-child {
+  background: var(--stats-total-bg);
+}
+
+.stats-table .stats-summary-body tr:nth-child(even) td:last-child {
+  background: var(--stats-total-alt-bg);
+}
+
+.stats-table .stats-summary-body tr.is-free-row td:last-child {
+  background: color-mix(in srgb, var(--stats-free-bg) 86%, var(--accent-2));
+}
+
+.stats-table .stats-summary-body td.is-weekend {
+  background: var(--stats-weekend-bg);
+}
+
+.stats-table .stats-summary-body tr:nth-child(even) td.is-weekend {
+  background: color-mix(in srgb, var(--stats-weekend-bg) 96%, var(--text));
+}
+
+.stats-table .stats-summary-body tr.is-free-row td.is-weekend {
+  background: color-mix(in srgb, var(--stats-free-bg) 96%, var(--accent-2));
 }
 
 .stats-table .stats-summary-body th:first-child,
@@ -332,22 +390,8 @@
 }
 
 .stats-table thead th.is-weekend {
-  color: var(--accent-2);
-}
-
-.stats-table thead th.is-weekend .stats-sort {
-  font-weight: 800;
-}
-
-.stats-table thead th.is-weekend .stats-sort::after {
-  content: "";
-  display: block;
-  width: 1.8em;
-  height: 0.1875em;
-  margin: 0.25em auto 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-2) 62%, transparent);
-  box-shadow: 0 0 0.75em color-mix(in srgb, var(--accent-2) 22%, transparent);
+  color: color-mix(in srgb, var(--accent-2) 78%, var(--text));
+  background: color-mix(in srgb, var(--stats-head-bg) 92%, var(--accent-2));
 }
 
 .activity-select-button {
