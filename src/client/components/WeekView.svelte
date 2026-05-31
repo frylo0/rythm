@@ -36,6 +36,8 @@
   const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
   const MIN_VIEW_BLOCK_HEIGHT_EM = 30 / ROOT_FONT_PX;
   const MIN_EDIT_BLOCK_HEIGHT_EM = 44 / ROOT_FONT_PX;
+  const CURRENT_TIME_UPDATE_MS = 30_000;
+  const CURRENT_TIME_FOCUS_AFTER_MS = 5 * 60_000;
 
   export let state: RythmState;
   export let onOpenItem: (id: string) => void = () => {};
@@ -138,25 +140,73 @@
   }
 
   onMount(() => {
+    let inactiveSince: number | null = null;
+    let shouldFocusOnReturn = false;
+    let returnFocusTimer: number | undefined;
+
     const syncCurrentDate = () => {
       currentDate = new Date();
     };
+
+    const clearReturnFocusTimer = () => {
+      if (returnFocusTimer == null) return;
+      window.clearTimeout(returnFocusTimer);
+      returnFocusTimer = undefined;
+    };
+
+    const markInactive = () => {
+      inactiveSince ??= Date.now();
+      clearReturnFocusTimer();
+      returnFocusTimer = window.setTimeout(() => {
+        shouldFocusOnReturn = true;
+      }, CURRENT_TIME_FOCUS_AFTER_MS);
+    };
+
+    const handleReturn = () => {
+      const awayFor = inactiveSince == null ? 0 : Date.now() - inactiveSince;
+      const focusAfterReturn = shouldFocusOnReturn || awayFor >= CURRENT_TIME_FOCUS_AFTER_MS;
+      inactiveSince = null;
+      shouldFocusOnReturn = false;
+      clearReturnFocusTimer();
+      syncCurrentDate();
+      if (focusAfterReturn) void focusToday();
+    };
+
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") syncCurrentDate();
-    }, 60_000);
+    }, CURRENT_TIME_UPDATE_MS);
     const onVisible = () => {
-      if (document.visibilityState === "visible") syncCurrentDate();
+      if (document.visibilityState === "visible") {
+        handleReturn();
+      } else {
+        markInactive();
+      }
     };
-    window.addEventListener("focus", syncCurrentDate);
-    window.addEventListener("pageshow", syncCurrentDate);
+    window.addEventListener("focus", handleReturn);
+    window.addEventListener("blur", markInactive);
+    window.addEventListener("online", handleReturn);
+    window.addEventListener("pageshow", handleReturn);
+    window.addEventListener("pagehide", markInactive);
     document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("focusin", handleReturn);
+    document.addEventListener("pointerdown", handleReturn);
+    document.addEventListener("freeze", markInactive);
+    document.addEventListener("resume", handleReturn);
     syncCurrentDate();
     focusToday();
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener("focus", syncCurrentDate);
-      window.removeEventListener("pageshow", syncCurrentDate);
+      clearReturnFocusTimer();
+      window.removeEventListener("focus", handleReturn);
+      window.removeEventListener("blur", markInactive);
+      window.removeEventListener("online", handleReturn);
+      window.removeEventListener("pageshow", handleReturn);
+      window.removeEventListener("pagehide", markInactive);
       document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("focusin", handleReturn);
+      document.removeEventListener("pointerdown", handleReturn);
+      document.removeEventListener("freeze", markInactive);
+      document.removeEventListener("resume", handleReturn);
     };
   });
 
