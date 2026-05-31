@@ -244,21 +244,43 @@
   text-align: center;
 }
 
-.stats-table tbody:not(.stats-summary-body) th:first-child {
+.stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) th:first-child {
   border-left: 1px solid var(--line);
 }
 
-.stats-table tbody:not(.stats-summary-body) td:last-child {
+.stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) td:last-child {
   border-right: 1px solid var(--line);
 }
 
 .stats-table td {
+  --value-k: 0;
   color: color-mix(in srgb, var(--text) 82%, var(--muted));
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.9375em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "kern" 1;
   letter-spacing: 0;
+}
+
+.stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) td.is-value {
+  --value-size: calc(0.75em + var(--value-k) * 0.421875em);
+  color: color-mix(in srgb, var(--text) calc(38% + var(--value-k) * 62%), transparent);
+  font-size: var(--value-size);
+}
+
+.stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) td.is-value::before {
+  content: "";
+  position: absolute;
+  inset: 0.375rem 0.5rem;
+  z-index: -1;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--accent-2) calc(var(--value-k) * 44%), transparent);
+}
+
+.stats-table tbody:not(.stats-summary-body):not(.stats-sleep-body) td.is-value[style*="--value-k:1"] {
+  color: #ffffff;
+  font-weight: 750;
+  text-shadow: 0 1px 0 rgba(15, 23, 42, 0.28);
 }
 
 .stats-table td:not(:last-child) {
@@ -276,7 +298,8 @@
 }
 
 .stats-table td.is-empty {
-  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  color: color-mix(in srgb, var(--muted) 34%, transparent);
+  font-size: 0.75em;
   font-weight: 400;
 }
 
@@ -302,12 +325,17 @@
   background: color-mix(in srgb, var(--stats-weekend-bg) 96%, var(--text));
 }
 
+.stats-table .stats-sleep-body tr,
 .stats-table .stats-summary-body tr {
   --stats-left-bg: var(--stats-summary-bg);
   background: var(--stats-summary-bg);
+}
+
+.stats-table .stats-summary-body tr {
   font-weight: 650;
 }
 
+.stats-table .stats-sleep-body tr:nth-child(even),
 .stats-table .stats-summary-body tr:nth-child(even) {
   --stats-left-bg: var(--stats-summary-alt-bg);
   background: var(--stats-summary-alt-bg);
@@ -318,25 +346,32 @@
   background: var(--stats-free-bg);
 }
 
+.stats-table .stats-sleep-body tr:first-child th,
+.stats-table .stats-sleep-body tr:first-child td,
 .stats-table .stats-summary-body tr:first-child th,
 .stats-table .stats-summary-body tr:first-child td {
   border-top: 0.25rem solid var(--bg);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-2) 18%, var(--line));
 }
 
+.stats-table .stats-sleep-body tr:first-child td:last-child,
 .stats-table .stats-summary-body tr:first-child td:last-child {
   border-right-color: transparent;
 }
 
+.stats-table .stats-sleep-body th,
+.stats-table .stats-sleep-body td,
 .stats-table .stats-summary-body th,
 .stats-table .stats-summary-body td {
   border-bottom-color: color-mix(in srgb, var(--line) 72%, transparent);
 }
 
+.stats-table .stats-sleep-body th:first-child,
 .stats-table .stats-summary-body th:first-child {
   border-left: 1px solid var(--line);
 }
 
+.stats-table .stats-sleep-body td:last-child,
 .stats-table .stats-summary-body td:last-child {
   border-right: 1px solid var(--line);
 }
@@ -384,6 +419,7 @@
   background: var(--stats-total-bg);
 }
 
+.stats-table .stats-sleep-body tr:nth-child(even) td:last-child,
 .stats-table .stats-summary-body tr:nth-child(even) td:last-child {
   background: var(--stats-total-alt-bg);
 }
@@ -392,10 +428,12 @@
   background: color-mix(in srgb, var(--stats-free-bg) 86%, var(--accent-2));
 }
 
+.stats-table .stats-sleep-body td.is-weekend,
 .stats-table .stats-summary-body td.is-weekend {
   background: var(--stats-weekend-bg);
 }
 
+.stats-table .stats-sleep-body tr:nth-child(even) td.is-weekend,
 .stats-table .stats-summary-body tr:nth-child(even) td.is-weekend {
   background: color-mix(in srgb, var(--stats-weekend-bg) 96%, var(--text));
 }
@@ -404,6 +442,8 @@
   background: color-mix(in srgb, var(--stats-free-bg) 96%, var(--accent-2));
 }
 
+.stats-table .stats-sleep-body th:first-child,
+.stats-table .stats-sleep-body td:first-child,
 .stats-table .stats-summary-body th:first-child,
 .stats-table .stats-summary-body td:first-child {
   background: var(--stats-left-bg);

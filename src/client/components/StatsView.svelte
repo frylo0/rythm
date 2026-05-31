@@ -39,9 +39,34 @@
     direct?: boolean;
   }
 
+  interface ValueScale {
+    min: number;
+    max: number;
+  }
+
   function addTotals(row: StatsRow, dayIndex: number, minutes: number): void {
     row.days[dayIndex] = (row.days[dayIndex] || 0) + minutes;
     row.total += minutes;
+  }
+
+  function createScale(values: number[]): ValueScale {
+    const positive = values.filter((value) => value > 0);
+    if (!positive.length) return { min: 0, max: 0 };
+    return {
+      min: Math.min(...positive),
+      max: Math.max(...positive)
+    };
+  }
+
+  function valueToneStyle(value: number, scale: ValueScale): string {
+    if (value <= 0 || scale.max <= 0) return "";
+    const range = scale.max - scale.min;
+    const k = range <= 0 ? 1 : Math.min(1, Math.max(0, (value - scale.min) / range));
+    return `--value-k:${k}`;
+  }
+
+  function isSleepRow(row: StatsRow): boolean {
+    return row.id === state.settings.sleepActivityId;
   }
 
   function ensureRow(rows: Map<string, StatsRow>, activity: Activity, level: number, label?: string, direct = false): StatsRow {
@@ -187,6 +212,11 @@
   $: columns = dayColumns(state);
   $: rows = buildRows(columns);
   $: visibleRows = sortedRows(rows);
+  $: activityRows = visibleRows.filter((row) => !isSleepRow(row));
+  $: sleepRows = rows.filter((row) => isSleepRow(row));
+  $: valueRows = rows.filter((row) => !isSleepRow(row));
+  $: dayValueScale = createScale(valueRows.flatMap((row) => row.days.filter((value) => value > 0)));
+  $: totalValueScale = createScale(valueRows.map((row) => row.total));
   $: busyByDay = columns.map((column) => [...blocksInColumn(state, column), sleepAfterColumn(state, column)].reduce((sum, item) => item ? sum + item.endAbsMin - item.startAbsMin : sum, 0));
   $: totalBusy = busyByDay.reduce((sum, value) => sum + value, 0);
   $: columnDurations = columns.map((column) => column.end - column.start + (sleepAfterColumn(state, column)?.endAbsMin || 0) - (sleepAfterColumn(state, column)?.startAbsMin || 0));
@@ -229,7 +259,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each visibleRows as row (row.key)}
+        {#each activityRows as row (row.key)}
           <tr class:is-direct={row.direct}>
             <th style={`--marker:${safeColor(row.color)};--level:${row.level}`}>
               <span class="activity-marker"></span>
@@ -237,12 +267,40 @@
               <span>{row.direct ? "сам блок" : row.name}</span>
             </th>
             {#each columns as column, index}
-              <td class:is-weekend={column.index === 5 || column.index === 6} class:is-empty={!row.days[index]}>{row.days[index] ? durationText(row.days[index]) : "—"}</td>
+              <td
+                class:is-weekend={column.index === 5 || column.index === 6}
+                class:is-empty={!row.days[index]}
+                class:is-sleep-value={isSleepRow(row) && row.days[index] > 0}
+                class:is-value={!isSleepRow(row) && row.days[index] > 0}
+                style={isSleepRow(row) ? "" : valueToneStyle(row.days[index] || 0, dayValueScale)}
+              >
+                {row.days[index] ? durationText(row.days[index]) : "—"}
+              </td>
             {/each}
-            <td><strong>{durationText(row.total)}</strong></td>
+            <td
+              class:is-sleep-value={isSleepRow(row) && row.total > 0}
+              class:is-value={!isSleepRow(row) && row.total > 0}
+              style={isSleepRow(row) ? "" : valueToneStyle(row.total, totalValueScale)}
+            ><strong>{durationText(row.total)}</strong></td>
           </tr>
         {/each}
       </tbody>
+      {#if sleepRows.length}
+        <tbody class="stats-sleep-body" aria-label="Сон">
+          {#each sleepRows as row (row.key)}
+            <tr>
+              <th style={`--marker:${safeColor(row.color)};--level:${row.level}`}>
+                <span class="activity-marker"></span>
+                <span>{row.name}</span>
+              </th>
+              {#each columns as column, index}
+                <td class:is-weekend={column.index === 5 || column.index === 6} class:is-empty={!row.days[index]}>{row.days[index] ? durationText(row.days[index]) : "—"}</td>
+              {/each}
+              <td><strong>{durationText(row.total)}</strong></td>
+            </tr>
+          {/each}
+        </tbody>
+      {/if}
       <tbody class="stats-summary-body" aria-label="Суммари">
         <tr class="summary-row"><th>Занято всего</th>{#each busyByDay as min, index}<td class:is-weekend={columns[index]?.index === 5 || columns[index]?.index === 6}>{durationText(min)}</td>{/each}<td>{durationText(totalBusy)}</td></tr>
         <tr class="summary-row is-free-row"><th>Не распределено</th>{#each columnDurations as min, index}<td class:is-weekend={columns[index]?.index === 5 || columns[index]?.index === 6}>{durationText(Math.max(0, min - busyByDay[index]))}</td>{/each}<td>{durationText(totalFree)}</td></tr>
