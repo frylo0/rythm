@@ -36,7 +36,7 @@
   const MIN_GAP_HEIGHT_EM = 20 / ROOT_FONT_PX;
   const MIN_VIEW_BLOCK_HEIGHT_EM = 30 / ROOT_FONT_PX;
   const MIN_EDIT_BLOCK_HEIGHT_EM = 44 / ROOT_FONT_PX;
-  const CURRENT_TIME_UPDATE_MS = 30_000;
+  const CURRENT_TIME_UPDATE_MS = 60_000 * 2;
   const CURRENT_TIME_FOCUS_AFTER_MS = 5 * 60_000;
 
   export let state: RythmState;
@@ -173,7 +173,7 @@
     };
 
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") syncCurrentDate();
+      syncCurrentDate();
     }, CURRENT_TIME_UPDATE_MS);
     const onVisible = () => {
       if (document.visibilityState === "visible") {
